@@ -1,0 +1,39 @@
+#FastAPI / API
+    fastapi
+    uvicorn[standard]
+    pydantic
+    pydantic-settings
+
+#AI
+    langgraph
+    langchain
+    google-genai
+
+#Database
+    sqlalchemy
+    psycopg[binary]
+    alembic
+    pgvector
+
+#Async
+    redis
+    celery
+
+#Data
+    httpx
+    pandas
+    numpy
+
+#Documents
+    pypdf
+
+#Frontend
+    streamlit
+
+#esting
+    pytest
+    pytest-asyncio
+
+#Development
+    ruff
+    mypy
