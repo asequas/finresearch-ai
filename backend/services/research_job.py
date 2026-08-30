@@ -18,13 +18,16 @@ class ResearchJobService:
         user_id: UUID,
         request: ResearchCreateRequest,
     ) -> ResearchJob:
-        return self.repository.create(
+        job= self.repository.create(
             session,
             user_id=user_id,
             query=request.query,
             company=request.company,
             ticker=request.ticker,
         )
+        session.commit()
+        session.refresh(job)
+        return job
     
     def get_research_job(
         self,

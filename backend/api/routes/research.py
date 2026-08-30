@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, status
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.orm import Session
 
 from backend.api.dependencies import (
@@ -33,3 +35,25 @@ def create_research_job(
         user_id=current_user.id,
         request=request,
     )
+
+@router.get(
+    "/{job_id}",
+    response_model=ResearchJobResponse,
+)
+def get_research_job(
+    job_id: UUID,
+    db: Session = Depends(get_db),
+    service: ResearchJobService = Depends(get_research_job_service),
+):
+    job = service.get_research_job(
+        db,
+        job_id=job_id,
+    )
+
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Research job not found",
+        )
+
+    return job
