@@ -35,6 +35,47 @@ def migrated_database():
     yield
 
 
+@pytest.fixture
+def make_user():
+    from backend.core.database import SessionLocal
+    from backend.models.user import User
+
+    def _make(email: str | None = None) -> User:
+        import uuid
+
+        with SessionLocal() as session:
+            user = User(email=email or f"user-{uuid.uuid4()}@example.com")
+            session.add(user)
+            session.commit()
+            return user
+
+    return _make
+
+
+@pytest.fixture
+def make_job(make_user):
+    from backend.core.database import SessionLocal
+    from backend.repositories.research_job import ResearchJobRepository
+    from backend.schemas.research import ResearchCreateRequest
+    from backend.services.research_job import ResearchJobService
+
+    def _make(user=None, ticker: str = "AAPL", max_attempts: int = 3, **overrides):
+        user = user or make_user()
+        with SessionLocal() as session:
+            job = ResearchJobService(ResearchJobRepository()).submit(
+                session,
+                user_id=user.id,
+                request=ResearchCreateRequest(query="Is Apple financially strong?", company="Apple Inc.", ticker=ticker),
+            )
+            job.max_attempts = max_attempts
+            for key, value in overrides.items():
+                setattr(job, key, value)
+            session.commit()
+            return job
+
+    return _make
+
+
 @pytest.fixture(autouse=True)
 def clean_tables():
     yield
