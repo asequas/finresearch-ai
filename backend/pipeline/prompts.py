@@ -47,7 +47,7 @@ class KeyPoint(BaseModel):
 class Assumption(BaseModel):
     driver: str
     assumption: str
-    basis: str = Field(description="Which metric or evidence this assumption is anchored to, e.g. 'M3 revenue CAGR'")
+    basis: str = Field(description="Only the ids this assumption is anchored to, comma-separated, e.g. 'M3, C5'. No other words.")
 
 
 class Scenario(BaseModel):
@@ -127,7 +127,7 @@ Company: {company} ({ticker}). Data as of fiscal period ending {period_end}.
 
 Write the report. Rules:
 - Use only the claims and metrics above. Every key point must cite claim ids.
-- Scenarios: bull/base/bear. Each assumption must be anchored to a metric id or claim id in `basis`.
+- Scenarios: bull/base/bear. Each assumption must be anchored to metric ids and/or claim ids, listed in `basis` (ids only).
   No price targets or valuation multiples (market price data is out of scope).
 - Risks: 3-6, ordered by severity, each citing claim ids.
 - No buy/sell/hold recommendations; describe what the evidence implies and what would change the view."""
