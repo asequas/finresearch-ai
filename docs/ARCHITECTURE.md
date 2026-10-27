@@ -1,3 +1,8 @@
+> **Superseded (2026-10-28).** This is the original August plan and is kept for history. Where it disagrees with
+> the code, the code and the ADRs in `docs/adr/` win: the queue is Postgres-backed (ADR 0001), not Celery + Redis;
+> the frontend is React, not Streamlit; embeddings are 768-d Gemini; submission returns 202 (ADR 0003).
+> Start from `README.md` and `docs/STATUS.md`.
+
 # FinResearch AI --- Architecture
 
 > 🔒 **ARCHITECTURE FREEZE --- V1.0**

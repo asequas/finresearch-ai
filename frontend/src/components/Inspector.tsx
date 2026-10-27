@@ -68,9 +68,9 @@ function EvidenceBlock({ evidence }: { evidence: Evidence }) {
   );
 }
 
-function MetricBlock({ metric }: { metric: Metric }) {
+function MetricBlock({ metric, divided = true }: { metric: Metric; divided?: boolean }) {
   return (
-    <div className="border-t border-rule pt-4">
+    <div className={divided ? "border-t border-rule pt-4" : ""}>
       <div className="flex items-baseline justify-between gap-4">
         <span>{metric.label} <span className="num text-muted">{metric.period}</span></span>
         <span className="num text-card">{metricValue(metric.value, metric.unit)}</span>
@@ -146,7 +146,7 @@ export function Inspector({ target, onClose }: { target: InspectTarget | null; o
                 )}
               </>
             )}
-            {target.kind === "metric" && <MetricBlock metric={target.metric} />}
+            {target.kind === "metric" && <MetricBlock metric={target.metric} divided={false} />}
             {target.kind === "fact" && (
               <div className="space-y-3">
                 <p className="num text-section">{target.value === null ? "Not reported" : target.field === "eps" ? usd(target.value, { compact: false }) : usd(target.value, { compact: false })}</p>
