@@ -26,7 +26,7 @@ flowchart LR
   W1["Worker"] -- "claim: FOR UPDATE SKIP LOCKED<br/>lease + heartbeat + fencing token" --> PG
   W2["Worker"] --> PG
   W1 --> SEC["SEC EDGAR<br/>tickers · submissions · XBRL · 10-K/10-Q"]
-  W1 --> GEM["Gemini<br/>flash / pro · 768-d embeddings"]
+  W1 --> GEM["Gemini<br/>flash-lite + thinking flash · 768-d embeddings"]
 ```
 
 A job runs eight checkpointed stages; each writes its outputs idempotently, and a retry resumes after the last
