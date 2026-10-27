@@ -16,6 +16,8 @@ from backend.schemas.research import (
     ResearchJobListResponse,
     ResearchJobResponse,
 )
+from backend.schemas.report import CompanySummary, ReportResponse
+from backend.services.report import ReportService
 from backend.services.research_job import ResearchJobService
 
 
@@ -113,3 +115,27 @@ def retry_research_job(
     current_user: User = Depends(get_current_user),
 ):
     return service.retry(db, job_id=job_id, user_id=current_user.id)
+
+
+@router.get(
+    "/{job_id}/report",
+    response_model=ReportResponse,
+    responses={404: {"description": "Job not found or report not ready"}},
+)
+def get_research_report(
+    job_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return ReportService().get_report(db, job_id=job_id, user_id=current_user.id)
+
+
+companies_router = APIRouter(prefix="/api/v1/companies", tags=["companies"])
+
+
+@companies_router.get("", response_model=list[CompanySummary])
+def list_companies(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return ReportService().list_companies(db, user_id=current_user.id)

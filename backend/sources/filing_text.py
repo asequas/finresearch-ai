@@ -65,6 +65,11 @@ TEN_K_SECTIONS: tuple[tuple[str, str, str], ...] = (
     ("mdna", "Management's Discussion and Analysis", r"item\s*7\s*[.:\-–—]?\s*management.{0,3}s\s+discussion"),
     ("market_risk", "Quantitative and Qualitative Disclosures About Market Risk", r"item\s*7a\s*[.:\-–—]?\s*quantitative"),
 )
+TEN_Q_SECTIONS: tuple[tuple[str, str, str], ...] = (
+    ("mdna", "Management's Discussion and Analysis", r"item\s*2\s*[.:\-–—]?\s*management.{0,3}s\s+discussion"),
+    ("market_risk", "Quantitative and Qualitative Disclosures About Market Risk", r"item\s*3\s*[.:\-–—]?\s*quantitative"),
+    ("risk_factors", "Risk Factors", r"item\s*1a\s*[.:\-–—]?\s*risk\s+factors"),
+)
 _ANY_ITEM = re.compile(r"^\s*item\s*\d{1,2}[a-c]?\s*[.:\-–—]?\s*\S", re.IGNORECASE | re.MULTILINE)
 
 
@@ -76,14 +81,14 @@ class Section:
     start: int
 
 
-def split_sections(text: str, max_chars_per_section: int = 150_000) -> list[Section]:
+def split_sections(text: str, form: str = "10-K", max_chars_per_section: int = 150_000) -> list[Section]:
     """Find each item's real body: the heading occurrence followed by the longest text.
 
     The table of contents repeats every heading, but its "sections" are one line long.
     """
     item_starts = sorted(m.start() for m in _ANY_ITEM.finditer(text))
     sections = []
-    for key, title, pattern in TEN_K_SECTIONS:
+    for key, title, pattern in (TEN_Q_SECTIONS if form.startswith("10-Q") else TEN_K_SECTIONS):
         best: tuple[int, int] | None = None
         for match in re.finditer(r"^\s*" + pattern, text, re.IGNORECASE | re.MULTILINE):
             start = match.start()
@@ -93,4 +98,4 @@ def split_sections(text: str, max_chars_per_section: int = 150_000) -> list[Sect
         if best and best[1] - best[0] > 500:
             body = text[best[0] : best[1]].strip()[:max_chars_per_section]
             sections.append(Section(key=key, title=title, text=body, start=best[0]))
-    return sections
+    return sorted(sections, key=lambda section: section.start)

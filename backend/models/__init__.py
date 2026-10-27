@@ -11,6 +11,8 @@ from backend.models.claim_evidence import ClaimEvidence
 from backend.models.report import Report
 from backend.models.company import Company
 from backend.models.calculated_metric import CalculatedMetric
+from backend.models.research_job_document import ResearchJobDocument
+from backend.models.claim_metric import ClaimMetric
 
 __all__ = [
     "Base",
@@ -26,4 +28,6 @@ __all__ = [
     "Report",
     "Company",
     "CalculatedMetric",
+    "ResearchJobDocument",
+    "ClaimMetric",
 ]
