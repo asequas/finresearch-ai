@@ -70,7 +70,11 @@ TEN_Q_SECTIONS: tuple[tuple[str, str, str], ...] = (
     ("market_risk", "Quantitative and Qualitative Disclosures About Market Risk", r"item\s*3\s*[.:\-–—]?\s*quantitative"),
     ("risk_factors", "Risk Factors", r"item\s*1a\s*[.:\-–—]?\s*risk\s+factors"),
 )
-_ANY_ITEM = re.compile(r"^\s*item\s*\d{1,2}[a-c]?\s*[.:\-–—]?\s*\S", re.IGNORECASE | re.MULTILINE)
+_ANY_ITEM = re.compile(r"^\s*item\s*(\d{1,2})([a-c]?)\b", re.IGNORECASE | re.MULTILINE)
+
+
+def _item_id(match: re.Match) -> tuple[int, str]:
+    return int(match.group(1)), match.group(2).lower()
 
 
 @dataclass(frozen=True)
@@ -86,13 +90,16 @@ def split_sections(text: str, form: str = "10-K", max_chars_per_section: int = 1
 
     The table of contents repeats every heading, but its "sections" are one line long.
     """
-    item_starts = sorted(m.start() for m in _ANY_ITEM.finditer(text))
+    # Filings repeat "Item 1A" as a running header on every page, so only a *different* item ends a section.
+    marks = [(m.start(), _item_id(m)) for m in _ANY_ITEM.finditer(text)]
     sections = []
     for key, title, pattern in (TEN_Q_SECTIONS if form.startswith("10-Q") else TEN_K_SECTIONS):
         best: tuple[int, int] | None = None
         for match in re.finditer(r"^\s*" + pattern, text, re.IGNORECASE | re.MULTILINE):
             start = match.start()
-            end = next((s for s in item_starts if s > start + 20), len(text))
+            own = _ANY_ITEM.match(text, start)
+            item = _item_id(own) if own else (0, "")
+            end = next((pos for pos, other in marks if pos > start and other != item), len(text))
             if best is None or end - start > best[1] - best[0]:
                 best = (start, end)
         if best and best[1] - best[0] > 500:

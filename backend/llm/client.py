@@ -1,7 +1,9 @@
 """Provider-agnostic LLM adapter (ADR 0006): structured JSON generation + embeddings."""
 import math
+import re
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from typing import Generic, Protocol, TypeVar
 
@@ -52,20 +54,58 @@ class _Throttle:
             self.last = time.monotonic()
 
 
+class _WindowLimiter:
+    """At most `limit` units per rolling 60 seconds, across threads."""
+
+    def __init__(self, limit: int):
+        self.limit = limit
+        self.lock = threading.Lock()
+        self.events: deque[tuple[float, int]] = deque()
+
+    def acquire(self, units: int) -> None:
+        units = min(units, self.limit)
+        while True:
+            with self.lock:
+                now = time.monotonic()
+                while self.events and now - self.events[0][0] >= 60:
+                    self.events.popleft()
+                used = sum(n for _, n in self.events)
+                if used + units <= self.limit:
+                    self.events.append((now, units))
+                    return
+                wait = 60 - (now - self.events[0][0]) + 0.05
+            time.sleep(wait)
+
+
+def retry_delay_seconds(exc: Exception, default: float = 30.0) -> float:
+    """The API's suggested wait (RetryInfo.retryDelay, e.g. '36s') when it gives one."""
+    match = re.search(r"retryDelay['\"]?\s*[:=]\s*['\"]?(\d+(?:\.\d+)?)s", str(getattr(exc, "details", "")) + str(exc))
+    return float(match.group(1)) if match else default
+
+
 class GeminiClient:
     """Gemini via google-genai. 429/5xx become RetryableError so the job queue backs off."""
 
     def __init__(self, api_key: str | None = None):
         from google import genai
+        from google.genai import types
 
         key = api_key or settings.gemini_api_key
         if not key:
             raise PermanentError("GEMINI_API_KEY is not configured. Add it to .env to run research jobs.")
-        self.client = genai.Client(api_key=key)
+        # One SDK-level attempt with a hard timeout: retries belong to the job queue, where they are visible.
+        self.client = genai.Client(
+            api_key=key,
+            http_options=types.HttpOptions(
+                timeout=settings.gemini_timeout_seconds * 1000,
+                retry_options=types.HttpRetryOptions(attempts=1),
+            ),
+        )
         self.fast_model = settings.gemini_fast_model
         self.strong_model = settings.gemini_strong_model
         self.embedding_model = settings.gemini_embedding_model
         self.throttle = _Throttle(min_interval=1.0)
+        self.embed_limiter = _WindowLimiter(settings.gemini_embed_per_minute)
 
     def _call(self, fn, *args, **kwargs):
         from google.genai import errors
@@ -74,13 +114,18 @@ class GeminiClient:
         try:
             return fn(*args, **kwargs)
         except errors.APIError as exc:
-            if exc.code in (429, 500, 502, 503, 504):
-                raise RetryableError(f"Gemini API {exc.code}: {exc.message}") from exc
-            if exc.code in (401, 403):
-                raise PermanentError("The Gemini API key was rejected. Check GEMINI_API_KEY in .env.") from exc
-            raise RetryableError(f"Gemini API {exc.code}: {exc.message}") from exc
+            self._raise(exc)
         except Exception as exc:  # network errors from the transport layer
             raise RetryableError(f"Gemini request failed: {type(exc).__name__}: {exc}") from exc
+
+    @staticmethod
+    def _raise(exc) -> None:
+        message = str(exc.message or "").split("For more information")[0].strip()
+        if exc.code in (401, 403):
+            raise PermanentError("The Gemini API key was rejected. Check GEMINI_API_KEY in .env.") from exc
+        if exc.code == 429:
+            raise RetryableError(f"Gemini quota reached ({message}). Retrying after a pause.") from exc
+        raise RetryableError(f"Gemini API {exc.code}: {message}") from exc
 
     def generate_json(
         self, *, prompt: str, schema: type[T], system: str, strong: bool = False, temperature: float = 0.2
@@ -114,16 +159,30 @@ class GeminiClient:
     def embed(self, texts: list[str], *, task: str) -> list[list[float]]:
         from google.genai import types
 
+        from google.genai import errors
+
         task_type = "RETRIEVAL_QUERY" if task == "query" else "RETRIEVAL_DOCUMENT"
         vectors: list[list[float]] = []
-        for start in range(0, len(texts), 100):
-            batch = texts[start : start + 100]
-            response = self._call(
-                self.client.models.embed_content,
-                model=self.embedding_model,
-                contents=batch,
-                config=types.EmbedContentConfig(task_type=task_type, output_dimensionality=EMBEDDING_DIMENSION),
-            )
+        batch_size = 30
+        for start in range(0, len(texts), batch_size):
+            batch = texts[start : start + batch_size]
+            for attempt in range(5):
+                self.embed_limiter.acquire(len(batch))
+                try:
+                    response = self.client.models.embed_content(
+                        model=self.embedding_model,
+                        contents=batch,
+                        config=types.EmbedContentConfig(task_type=task_type, output_dimensionality=EMBEDDING_DIMENSION),
+                    )
+                    break
+                except errors.APIError as exc:
+                    # A per-minute quota clears quickly: wait it out here instead of failing the whole stage.
+                    if exc.code == 429 and attempt < 4:
+                        time.sleep(min(retry_delay_seconds(exc), 65))
+                        continue
+                    self._raise(exc)
+                except Exception as exc:
+                    raise RetryableError(f"Gemini request failed: {type(exc).__name__}: {exc}") from exc
             # Gemini only normalises full-size (3072-d) embeddings; truncated ones must be renormalised.
             vectors.extend(normalise(list(embedding.values)) for embedding in response.embeddings)
         if len(vectors) != len(texts) or any(len(v) != EMBEDDING_DIMENSION for v in vectors):

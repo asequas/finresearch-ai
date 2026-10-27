@@ -13,9 +13,13 @@ class Settings(BaseSettings):
     # Research pipeline
     pipeline: str = "research"  # "research" or "stub" (Phase 3 stub stages)
     gemini_api_key: str | None = None
-    gemini_fast_model: str = "gemini-2.5-flash"
-    gemini_strong_model: str = "gemini-2.5-pro"
+    gemini_fast_model: str = "gemini-3.5-flash-lite"
+    # Pro models have no free-tier quota; a thinking Flash model drafts and synthesizes.
+    gemini_strong_model: str = "gemini-3.6-flash"
     gemini_embedding_model: str = "gemini-embedding-001"
+    gemini_timeout_seconds: int = 180
+    # Free tier: 100 embedding requests per minute, and every text in a batch counts as one request.
+    gemini_embed_per_minute: int = 90
     sec_user_agent: str | None = None
     data_cache_dir: str = ".cache/finresearch"
 
