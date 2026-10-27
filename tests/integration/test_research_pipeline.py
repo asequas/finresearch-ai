@@ -252,3 +252,27 @@ def test_rerunning_stages_is_idempotent(run_job, tmp_path):
         }
         assert session.get(ResearchJob, job.id).status == ResearchJobStatus.COMPLETED
     assert after == before
+
+
+def test_evaluation_metrics_and_label_scoring(run_job):
+    from backend.evals.citations import auto_metrics, export_for_labelling, score_labels
+
+    job = run_job()
+    with SessionLocal() as session:
+        metrics = auto_metrics(session, job.id)
+        items = export_for_labelling(session, job.id)
+
+    assert metrics.claims == 4
+    assert metrics.material_claims == 4
+    assert metrics.citation_coverage == 0.75  # the fabricated quote leaves one fact uncovered
+    assert metrics.quote_verification_rate == 0.5
+    assert metrics.numeric_consistency == 0.5  # the 99.0% claim fails the numeric check
+    assert len(items) == 4 and all(i["label"] is None for i in items)
+
+    for item in items:
+        item["label"] = "correct" if item["system_verdict"] == "supported" else "incorrect"
+    score = score_labels(items)
+    assert score.labelled == 4
+    assert score.citation_correctness == 0.5
+    assert score.meets_target is False
+    assert score.system_supported_precision == 1.0
