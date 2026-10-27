@@ -224,3 +224,15 @@ def test_cancel_running_job_sets_flag():
     assert response.status_code == 200
     assert response.json()["status"] == "running"
     assert response.json()["cancel_requested"] is True
+
+
+def test_meta_reports_configuration_and_queue_depth():
+    client.post("/api/v1/research", json=PAYLOAD)
+
+    body = client.get("/api/v1/meta").json()
+
+    assert body["queue"]["queued"] == 1
+    assert body["queue"]["running"] == 0
+    assert body["queue"]["oldest_queued_seconds"] >= 0
+    assert isinstance(body["gemini_configured"], bool)
+    assert "embedding" in body["models"]
