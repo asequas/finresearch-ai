@@ -1,7 +1,8 @@
 import uuid
+from decimal import Decimal
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, Index
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, Text, Index, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -14,6 +15,10 @@ if TYPE_CHECKING:
 class AgentRun(Base):
     __tablename__ = "agent_runs"
     __table_args__ = (
+        CheckConstraint(
+            "status IN ('running', 'completed', 'failed')",
+            name="ck_agent_runs_status",
+        ),
         Index(
             "ix_agent_runs_job_agent",
             "research_job_id",
@@ -41,6 +46,13 @@ class AgentRun(Base):
     status: Mapped[str] = mapped_column(
         String(32),
         nullable=False,
+    )
+
+    attempt: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default=text("1"),
     )
 
     started_at: Mapped[datetime] = mapped_column(
@@ -74,7 +86,7 @@ class AgentRun(Base):
         nullable=True,
     )
 
-    estimated_cost: Mapped[float | None] = mapped_column(
+    estimated_cost: Mapped[Decimal | None] = mapped_column(
         Numeric(12, 8),
         nullable=True,
     )
