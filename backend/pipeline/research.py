@@ -313,16 +313,16 @@ class IndexDocuments:
             if not sections:
                 logger.warning("no standard sections found in %s; indexing the whole document", url)
                 sections = []
-                chunks = chunk_text("document", text[:300_000])
+                chunks = chunk_text("document", text[:300_000], target_chars=2200, overlap_chars=250)
             else:
                 chunks = []
                 for section in sections:
-                    chunks.extend(chunk_text(section.key, section.text, start_index=len(chunks)))
+                    chunks.extend(chunk_text(section.key, section.text, target_chars=2200, overlap_chars=250, start_index=len(chunks)))
 
             embeddings: list[list[float]] = []
-            for start in range(0, len(chunks), 100):
+            for start in range(0, len(chunks), 30):
                 ctx.checkpoint()
-                embeddings.extend(self.services.llm.embed([c.content for c in chunks[start : start + 100]], task="document"))
+                embeddings.extend(self.services.llm.embed([c.content for c in chunks[start : start + 30]], task="document"))
 
             with ctx.transaction() as session:
                 locked = session.scalar(select(Document).where(Document.id == document_id).with_for_update())

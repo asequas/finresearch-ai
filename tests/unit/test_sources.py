@@ -184,3 +184,20 @@ def test_chunking_splits_long_paragraph_on_sentences():
     assert len(chunks) > 1
     assert all(len(c.content) <= 500 for c in chunks)
     assert all(c.content.rstrip().endswith(".") for c in chunks)
+
+
+def test_running_page_headers_do_not_end_a_section():
+    # Real 10-Ks (e.g. Microsoft's) repeat "Item 1A" at the top of every page of that item.
+    page = "<p>Supply constraints could reduce our margins in many markets.</p>" * 10
+    html = (
+        "<p>Item 1. Business</p><p>Item 1A. Risk Factors</p>"
+        "<p>ITEM 1. BUSINESS</p>" + page + "<p>Item 1</p>" + page
+        + "<p>Item 1A</p><p>ITEM 1A. RISK FACTORS</p>" + page + "<p>Item 1A</p>" + page + "<p>Item 1A</p>" + page
+        + "<p>ITEM 1B. UNRESOLVED STAFF COMMENTS</p><p>None.</p>"
+    )
+
+    sections = {s.key: s for s in split_sections(html_to_text(html))}
+
+    assert sections["business"].text.count("Supply constraints") == 20
+    assert sections["risk_factors"].text.count("Supply constraints") == 30
+    assert "UNRESOLVED" not in sections["risk_factors"].text

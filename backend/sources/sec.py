@@ -84,6 +84,9 @@ class SecClient:
                 "SEC_USER_AGENT is not configured. Set it in .env to 'AppName contact@email' "
                 "(SEC EDGAR requires a contact email)."
             )
+        if " " not in user_agent.strip():
+            # SEC asks for "Company Name contact@email"; an email on its own gets the app name in front.
+            user_agent = f"FinResearch AI {user_agent.strip()}"
         self.cache_dir = Path(cache_dir) / "sec"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.http = http or httpx.Client(
