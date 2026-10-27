@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status, HTTPException
+from fastapi import APIRouter, Depends, Header, Query, Response, status
 from sqlalchemy.orm import Session
 
 from backend.api.dependencies import (
@@ -8,8 +8,14 @@ from backend.api.dependencies import (
     get_db,
     get_research_job_service,
 )
+from backend.models.research_job import ResearchJobStatus
 from backend.models.user import User
-from backend.schemas.research import ResearchCreateRequest, ResearchJobResponse
+from backend.schemas.research import (
+    ResearchCreateRequest,
+    ResearchJobDetailResponse,
+    ResearchJobListResponse,
+    ResearchJobResponse,
+)
 from backend.services.research_job import ResearchJobService
 
 
@@ -22,38 +28,88 @@ router = APIRouter(
 @router.post(
     "",
     response_model=ResearchJobResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={409: {"description": "Idempotency-Key reused with a different request"}},
 )
 def create_research_job(
     request: ResearchCreateRequest,
+    response: Response,
+    idempotency_key: str | None = Header(default=None, min_length=1, max_length=128),
     db: Session = Depends(get_db),
     service: ResearchJobService = Depends(get_research_job_service),
     current_user: User = Depends(get_current_user),
 ):
-    return service.create_research_job(
+    job = service.submit(
         db,
         user_id=current_user.id,
         request=request,
+        idempotency_key=idempotency_key,
     )
+    response.headers["Location"] = f"/api/v1/research/{job.id}"
+    return job
+
+
+@router.get(
+    "",
+    response_model=ResearchJobListResponse,
+)
+def list_research_jobs(
+    limit: int = Query(default=20, ge=1, le=100),
+    cursor: str | None = None,
+    status_filter: ResearchJobStatus | None = Query(default=None, alias="status"),
+    ticker: str | None = Query(default=None, max_length=20),
+    db: Session = Depends(get_db),
+    service: ResearchJobService = Depends(get_research_job_service),
+    current_user: User = Depends(get_current_user),
+):
+    return service.list_jobs(
+        db,
+        user_id=current_user.id,
+        limit=limit,
+        cursor=cursor,
+        status=status_filter,
+        ticker=ticker,
+    )
+
 
 @router.get(
     "/{job_id}",
-    response_model=ResearchJobResponse,
+    response_model=ResearchJobDetailResponse,
+    responses={404: {"description": "Research job not found"}},
 )
 def get_research_job(
     job_id: UUID,
     db: Session = Depends(get_db),
     service: ResearchJobService = Depends(get_research_job_service),
+    current_user: User = Depends(get_current_user),
 ):
-    job = service.get_research_job(
-        db,
-        job_id=job_id,
-    )
+    return service.get_detail(db, job_id=job_id, user_id=current_user.id)
 
-    if job is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Research job not found",
-        )
 
-    return job
+@router.post(
+    "/{job_id}/cancel",
+    response_model=ResearchJobResponse,
+    responses={404: {"description": "Not found"}, 409: {"description": "Job cannot be cancelled"}},
+)
+def cancel_research_job(
+    job_id: UUID,
+    db: Session = Depends(get_db),
+    service: ResearchJobService = Depends(get_research_job_service),
+    current_user: User = Depends(get_current_user),
+):
+    return service.cancel(db, job_id=job_id, user_id=current_user.id)
+
+
+@router.post(
+    "/{job_id}/retry",
+    response_model=ResearchJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={404: {"description": "Not found"}, 409: {"description": "Job cannot be retried"}},
+)
+def retry_research_job(
+    job_id: UUID,
+    db: Session = Depends(get_db),
+    service: ResearchJobService = Depends(get_research_job_service),
+    current_user: User = Depends(get_current_user),
+):
+    return service.retry(db, job_id=job_id, user_id=current_user.id)

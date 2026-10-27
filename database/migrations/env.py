@@ -75,16 +75,10 @@ def run_migrations_online() -> None:
         connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         connection.commit()
 
-        def compare_type(context, inspected_column, metadata_column, inspected_type, metadata_type):
-            if (
-                metadata_column.name == "status"
-                and metadata_column.table.name == "research_jobs"
-            ):
-                return False
-
-            return None
         context.configure(
-            connection=connection, target_metadata=target_metadata, compare_type=compare_type
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
         )
 
         with context.begin_transaction():
