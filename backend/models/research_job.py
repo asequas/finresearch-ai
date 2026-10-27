@@ -118,6 +118,12 @@ class ResearchJob(Base):
         nullable=False,
     )
 
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     query: Mapped[str] = mapped_column(
         Text,
         nullable=False,
