@@ -18,7 +18,7 @@ Write your answer, then compare it with [ADR 0001](adr/0001-postgres-backed-job-
 
 ## Concurrency and state machines
 
-- **Check-then-act is a race.** Reading `status == queued` in Python and then writing `running` lets two workers both "win" under READ COMMITTED (reproduced, STATUS D2). Transitions must be atomic in the database: a conditional `UPDATE … WHERE status = :expected`, plus `FOR UPDATE SKIP LOCKED` for claims (ADR 0001, 0002).
+- **Check-then-act is a race.** Reading `status == queued` in Python and then writing `running` lets two workers both "win" under READ COMMITTED (reproduced in the audit). Transitions must be atomic in the database: a conditional `UPDATE … WHERE status = :expected`, plus `FOR UPDATE SKIP LOCKED` for claims (ADR 0001, 0002).
 - **State without timestamps is half a state machine.** A `completed` job with no `completed_at` and a `failed` job with no `error_message` can't be debugged or shown to a user.
 
 ## Schema design
