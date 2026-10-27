@@ -31,6 +31,10 @@ class Claim(Base):
             "verification_status IN ('supported', 'partially_supported', 'unsupported', 'not_verified')",
             name="ck_claims_verification_status",
         ),
+        CheckConstraint(
+            "importance BETWEEN 1 AND 3",
+            name="ck_claims_importance",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -51,16 +55,16 @@ class Claim(Base):
         nullable=True,
     )
 
-    metric_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("calculated_metrics.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-
     section: Mapped[str] = mapped_column(
         String(64),
         nullable=False,
         server_default="analysis",
+    )
+
+    importance: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default=text("2"),
     )
 
     position: Mapped[int] = mapped_column(
