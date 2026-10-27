@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Text, Index
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, Index, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -48,6 +48,12 @@ class Evidence(Base):
     excerpt: Mapped[str] = mapped_column(
         Text,
         nullable=False,
+    )
+
+    quote_verified: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
     )
 
     page_number: Mapped[int | None] = mapped_column(

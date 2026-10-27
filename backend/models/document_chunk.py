@@ -3,14 +3,16 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, ForeignKey, Integer, Text, UniqueConstraint, Index
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import Computed, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.models.base import Base
 
 if TYPE_CHECKING:
     from backend.models.document import Document
+
+EMBEDDING_DIMENSION = 768
 
 
 class DocumentChunk(Base):
@@ -20,6 +22,17 @@ class DocumentChunk(Base):
             "document_id",
             "chunk_index",
             name="uq_document_chunk_index",
+        ),
+        Index(
+            "ix_document_chunks_search_vector",
+            "search_vector",
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_document_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
     )
 
@@ -40,13 +53,24 @@ class DocumentChunk(Base):
         nullable=False,
     )
 
+    section: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+
     content: Mapped[str] = mapped_column(
         Text,
         nullable=False,
     )
 
+    search_vector: Mapped[str | None] = mapped_column(
+        TSVECTOR,
+        Computed("to_tsvector('english', content)", persisted=True),
+        nullable=True,
+    )
+
     embedding: Mapped[list[float] | None] = mapped_column(
-        Vector(768),
+        Vector(EMBEDDING_DIMENSION),
         nullable=True,
     )
 
