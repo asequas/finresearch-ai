@@ -22,7 +22,7 @@ class DraftClaim(BaseModel):
     text: str = Field(description="One self-contained sentence")
     metric_refs: list[str] = Field(default_factory=list, description="Metric ids like 'M4' used by this claim")
     evidence: list[EvidenceRef] = Field(default_factory=list)
-    importance: Literal[1, 2, 3] = Field(description="3 = central to the answer")
+    importance: int = Field(ge=1, le=3, description="1 to 3; 3 = central to the answer")
 
 
 class ClaimDraft(BaseModel):
