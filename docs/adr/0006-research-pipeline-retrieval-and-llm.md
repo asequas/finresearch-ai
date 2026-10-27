@@ -29,7 +29,14 @@ One ticker and question in, an evidence-backed report out, in a few minutes, at 
 
 **Verification:** (1) every evidence quote must literally appear (whitespace-normalised) in its chunk; (2) calculation claims must reference a metric and every number in the text must match it within rounding; (3) a fast-model judge rates the remaining fact/interpretation claims against their quotes as supported, partially supported or unsupported. Unsupported claims stay in the evidence ledger, flagged, and are excluded from the executive summary.
 
+**Models (revised 2026-10-28 after the first real run):** `gemini-3.5-flash-lite` for planning and fact-checking,
+`gemini-3.6-flash` (a thinking Flash model) for drafting and synthesis. Pro models return 429 on the free tier, so the
+"stronger model for synthesis" is a reasoning Flash model. Both are settings, not code.
+
 **Rate limits:** SEC fair access (≤10 requests/s, declared User-Agent) through a process-wide limiter and an on-disk cache; Gemini 429 and 5xx responses raise `RetryableError`, so the queue's backoff handles quota bursts.
+The free tier allows 100 embedding requests a minute and counts every text in a batch, so embeddings are paced by a
+rolling-window limiter (90/min), chunks are ~2,200 characters, and a 429 during indexing waits out the API's
+suggested delay rather than failing the stage. Filings are indexed once and shared by every job that uses them.
 
 ## Alternatives
 
