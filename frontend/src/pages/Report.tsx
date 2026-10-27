@@ -276,7 +276,8 @@ function ReportView({ report }: { report: Report }) {
                           <dd>{a.assumption}</dd>
                           {(a.basis || (a.claim_ids?.length ?? 0) > 0) && (
                             <dd className="text-small text-muted">
-                              Basis: {a.basis}<Cite ids={a.claim_ids ?? []} numbers={numbers} onOpen={openClaim} />
+                              Basis: {a.basis.replace(/\bclaim \d+(,\s*)?/g, "").replace(/[,\s]+$/, "") || "claims"}
+                              <Cite ids={a.claim_ids ?? []} numbers={numbers} onOpen={openClaim} />
                             </dd>
                           )}
                         </div>
