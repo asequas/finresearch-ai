@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     gemini_fast_model: str = "gemini-3.5-flash-lite"
     # Pro models have no free-tier quota; a thinking Flash model drafts and synthesizes.
     gemini_strong_model: str = "gemini-3.6-flash"
+    # Tried in order when the preferred model is overloaded (503) or out of quota (429).
+    gemini_strong_fallbacks: list[str] = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.7-flash"]
+    gemini_fast_fallbacks: list[str] = ["gemini-flash-lite-latest", "gemini-3.1-flash-lite"]
     gemini_embedding_model: str = "gemini-embedding-001"
     gemini_timeout_seconds: int = 180
     # Free tier: 100 embedding requests per minute, and every text in a batch counts as one request.

@@ -1,4 +1,5 @@
 """Provider-agnostic LLM adapter (ADR 0006): structured JSON generation + embeddings."""
+import logging
 import math
 import re
 import threading
@@ -14,6 +15,7 @@ from backend.models.document_chunk import EMBEDDING_DIMENSION
 from backend.pipeline.base import PermanentError, RetryableError
 
 T = TypeVar("T", bound=BaseModel)
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -103,20 +105,11 @@ class GeminiClient:
         )
         self.fast_model = settings.gemini_fast_model
         self.strong_model = settings.gemini_strong_model
+        self.strong_fallbacks = settings.gemini_strong_fallbacks
+        self.fast_fallbacks = settings.gemini_fast_fallbacks
         self.embedding_model = settings.gemini_embedding_model
         self.throttle = _Throttle(min_interval=1.0)
         self.embed_limiter = _WindowLimiter(settings.gemini_embed_per_minute)
-
-    def _call(self, fn, *args, **kwargs):
-        from google.genai import errors
-
-        self.throttle.wait()
-        try:
-            return fn(*args, **kwargs)
-        except errors.APIError as exc:
-            self._raise(exc)
-        except Exception as exc:  # network errors from the transport layer
-            raise RetryableError(f"Gemini request failed: {type(exc).__name__}: {exc}") from exc
 
     @staticmethod
     def _raise(exc) -> None:
@@ -132,7 +125,6 @@ class GeminiClient:
     ) -> LLMResult[T]:
         from google.genai import types
 
-        model = self.strong_model if strong else self.fast_model
         config = types.GenerateContentConfig(
             system_instruction=system,
             temperature=temperature,
@@ -141,7 +133,7 @@ class GeminiClient:
         )
         last_error: Exception | None = None
         for _ in range(2):  # one repair attempt for malformed output
-            response = self._call(self.client.models.generate_content, model=model, contents=prompt, config=config)
+            model, response = self._generate_with_fallback(strong, prompt, config)
             usage = response.usage_metadata
             try:
                 value = schema.model_validate_json(response.text or "")
@@ -156,10 +148,31 @@ class GeminiClient:
             )
         raise RetryableError(f"{model} returned output that did not match the schema: {last_error}")
 
-    def embed(self, texts: list[str], *, task: str) -> list[list[float]]:
-        from google.genai import types
+    def _generate_with_fallback(self, strong: bool, prompt: str, config):
+        """Try the preferred model, then same-tier fallbacks when it is overloaded or out of quota.
 
+        Separate models have separate free-tier quotas, and a 503 "high demand" on one rarely
+        means all are down. Anything else (bad request, auth) is not a reason to switch.
+        """
         from google.genai import errors
+
+        preferred = self.strong_model if strong else self.fast_model
+        chain = [preferred, *[m for m in (self.strong_fallbacks if strong else self.fast_fallbacks) if m != preferred]]
+        for index, model in enumerate(chain):
+            self.throttle.wait()
+            try:
+                return model, self.client.models.generate_content(model=model, contents=prompt, config=config)
+            except errors.APIError as exc:
+                if exc.code in (429, 500, 503, 504) and index < len(chain) - 1:
+                    logger.warning("%s unavailable (%s); falling back to %s", model, exc.code, chain[index + 1])
+                    continue
+                self._raise(exc)
+            except Exception as exc:  # network errors from the transport layer
+                raise RetryableError(f"Gemini request failed: {type(exc).__name__}: {exc}") from exc
+        raise RetryableError("No Gemini model was available")
+
+    def embed(self, texts: list[str], *, task: str) -> list[list[float]]:
+        from google.genai import errors, types
 
         task_type = "RETRIEVAL_QUERY" if task == "query" else "RETRIEVAL_DOCUMENT"
         vectors: list[list[float]] = []

@@ -105,7 +105,7 @@ function ReportView({ report }: { report: Report }) {
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 max-w-[880px]">
           <h1 className="text-[22px] leading-[28px] font-semibold md:text-title">
-            {report.company.name} <span className="font-normal text-muted">{report.company.ticker}</span>
+            {report.job.company} <span className="font-normal text-muted">{report.company.ticker}</span>
           </h1>
           <p className="mt-1 text-read text-soft">{report.headline}</p>
         </div>
@@ -274,7 +274,11 @@ function ReportView({ report }: { report: Report }) {
                         <div key={i}>
                           <dt className="text-small text-muted">{a.driver}</dt>
                           <dd>{a.assumption}</dd>
-                          <dd className="text-small text-muted">Basis: {a.basis}</dd>
+                          {(a.basis || (a.claim_ids?.length ?? 0) > 0) && (
+                            <dd className="text-small text-muted">
+                              Basis: {a.basis}<Cite ids={a.claim_ids ?? []} numbers={numbers} onOpen={openClaim} />
+                            </dd>
+                          )}
                         </div>
                       ))}
                     </dl>
@@ -369,7 +373,10 @@ function ReportView({ report }: { report: Report }) {
                   <span className="text-small text-muted">Period <span className="num">{date(f.period)}</span> · filed <span className="num">{date(f.filed)}</span></span>
                 </li>
               ))}
-              <li className="px-6 py-2.5 text-small text-muted">Financial data: SEC XBRL company facts, CIK <span className="num">{report.company.cik}</span></li>
+              <li className="px-6 py-2.5 text-small text-muted">
+                Financial data: SEC XBRL company facts for {report.company.name}, CIK <span className="num">{report.company.cik}</span>
+                {report.company.sic_description ? ` · ${report.company.sic_description}` : ""}
+              </li>
             </ul>
           </Panel>
 
