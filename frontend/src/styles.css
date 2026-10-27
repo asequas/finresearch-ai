@@ -1,0 +1,150 @@
+@import "tailwindcss";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+/*
+ * Design tokens: see frontend/DESIGN.md. Style "data-terminal" (seed 1425590224), dark first.
+ * Colour budget under 3%: the teal accent appears as 1px selection lines and on the screen's
+ * main data element only. Numbers carry their sign in text; red/green only on status.
+ */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #171719;
+  --surface: #131217;
+  --raised: #212023;
+  --border: #222224;
+  --rule: #1b1a1f;
+  --control: #3a3a3e;
+  --text: #ffffff;
+  --soft: #c9cacd;
+  --muted: #8a8c92;
+  --accent: #2bb3a3;
+  --positive: #44a282;
+  --negative: #e5566f;
+  --warning: #e0a84a;
+  --primary: #ffffff;
+  --primary-ink: #111113;
+  --mark: rgba(43, 179, 163, 0.22);
+  --pill-positive-bg: #1b2828;  --pill-positive-ink: #5fc39c;
+  --pill-negative-bg: #2c1a20;  --pill-negative-ink: #f07a8e;
+  --pill-warning-bg: #2a2416;   --pill-warning-ink: #e0a84a;
+  --pill-neutral-bg: #212023;   --pill-neutral-ink: #bdbdc0;
+  --grid: #2a2a2d;
+  --shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ground: #f4f5f6;
+  --surface: #ffffff;
+  --raised: #f1f2f4;
+  --border: #e3e5e8;
+  --rule: #eeeff1;
+  --control: #c9cdd3;
+  --text: #111316;
+  --soft: #33363c;
+  --muted: #5c6068;
+  --accent: #0e8a7d;
+  --positive: #247b50;
+  --negative: #c4242a;
+  --warning: #92400e;
+  --primary: #1d1f20;
+  --primary-ink: #ffffff;
+  --mark: rgba(14, 138, 125, 0.16);
+  --pill-positive-bg: #dcfae5;  --pill-positive-ink: #04250e;
+  --pill-negative-bg: #ffedea;  --pill-negative-ink: #831c1e;
+  --pill-warning-bg: #fffbeb;   --pill-warning-ink: #92400e;
+  --pill-neutral-bg: #eef0f2;   --pill-neutral-ink: #3d4148;
+  --grid: #e5e5e5;
+  --shadow: 0 12px 28px rgba(17, 19, 22, 0.12);
+}
+
+@theme {
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-border: var(--border);
+  --color-rule: var(--rule);
+  --color-control: var(--control);
+  --color-ink: var(--text);
+  --color-soft: var(--soft);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-warning: var(--warning);
+  --color-primary: var(--primary);
+  --color-primary-ink: var(--primary-ink);
+  --text-title: 26px;
+  --text-title--line-height: 32px;
+  --text-section: 20px;
+  --text-section--line-height: 28px;
+  --text-card: 16px;
+  --text-card--line-height: 24px;
+  --text-body: 13px;
+  --text-body--line-height: 20px;
+  --text-small: 12px;
+  --text-small--line-height: 18px;
+  --text-read: 15px;
+  --text-read--line-height: 24px;
+  --radius-card: 6px;
+}
+
+html {
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+/* Root stays 16px so rem-based spacing keeps its scale; the dense 13px text size lives on body. */
+body { margin: 0; font-size: 13px; line-height: 20px; }
+
+/* Every figure: Plex Mono, tabular, so digits stack in columns. */
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+::selection { background: var(--mark); }
+
+mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1px; box-shadow: inset 0 -1px 0 var(--accent); }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+:root[data-theme="dark"] .panel { box-shadow: var(--shadow); border-color: transparent; }
+
+/* The style's one move: a selection is a 1px accent line as wide as its label. */
+.sel-line { position: relative; }
+.sel-line[aria-current="page"]::after,
+.sel-line[aria-selected="true"]::after,
+.sel-line[aria-pressed="true"]::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: var(--accent);
+}
+
+dialog.sheet { margin: 0 0 0 auto; height: 100dvh; max-height: 100dvh; width: min(560px, 100vw); max-width: 100vw;
+  border: 0; padding: 0; background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+dialog.sheet::backdrop { background: rgba(0, 0, 0, 0.45); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .press { transition: transform 80ms ease, background-color 120ms ease, color 120ms ease, border-color 120ms ease; }
+  .press:active { transform: translateY(1px); }
+  .live-dot { animation: live 1.6s ease-in-out infinite; }
+  @keyframes live { 50% { opacity: 0.35; } }
+}
+
+@media print {
+  :root, :root[data-theme] {
+    --ground: #fff; --surface: #fff; --raised: #f4f4f4; --border: #ddd; --rule: #e5e5e5;
+    --text: #000; --soft: #222; --muted: #444; --accent: #0e8a7d; --mark: #d8f1ee;
+  }
+  .no-print { display: none !important; }
+  .panel { box-shadow: none !important; border: 1px solid #ddd !important; break-inside: avoid; }
+  main { padding: 0 !important; }
+}

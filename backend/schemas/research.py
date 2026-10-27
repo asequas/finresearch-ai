@@ -46,6 +46,7 @@ class ResearchJobResponse(BaseModel):
     max_attempts: int
     error_message: str | None
     cancel_requested: bool
+    lease_expires_at: datetime | None
     created_at: datetime
     updated_at: datetime
     started_at: datetime | None

@@ -522,12 +522,20 @@ def build_limitations(session: Session, job_id: UUID) -> list[str]:
         "Debt uses reported long-term debt; leases and commercial paper may be excluded.",
     ]
     snapshots = list(session.scalars(select(FinancialSnapshot).where(FinancialSnapshot.research_job_id == job_id)))
+    never, partly = [], []
     for name in SNAPSHOT_FIELDS:
-        years = [s.period for s in snapshots if getattr(s, name) is None]
-        if years and len(years) == len(snapshots):
-            limitations.append(f"{name.replace('_', ' ').capitalize()} is not reported in XBRL for any year analysed.")
+        years = sorted(s.period for s in snapshots if getattr(s, name) is None)
+        label = name.replace("_", " ")
+        if snapshots and len(years) == len(snapshots):
+            never.append(label)
         elif years:
-            limitations.append(f"{name.replace('_', ' ').capitalize()} is missing for {', '.join(sorted(years))}.")
+            partly.append(f"{label} ({', '.join(years)})")
+    if never:
+        limitations.append(
+            f"Not reported in XBRL for any year analysed, so metrics that need them are skipped: {', '.join(never)}."
+        )
+    if partly:
+        limitations.append(f"Missing for some years: {'; '.join(partly)}.")
     unsupported = session.scalar(
         select(Claim.id).where(Claim.research_job_id == job_id, Claim.verification_status == "unsupported").limit(1)
     )
