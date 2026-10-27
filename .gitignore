@@ -30,3 +30,5 @@ dist/
 
 # Logs
 *.log
+# Local data and tooling output
+.cache/
