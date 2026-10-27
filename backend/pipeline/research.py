@@ -4,6 +4,7 @@ retried or resumed stage never duplicates data.
 """
 import hashlib
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -571,7 +572,7 @@ class Synthesize:
             f"{cid} [{c.section}/{c.claim_type}/{c.verification_status}] {c.claim_text}" for cid, c in claim_ids.items()
         )
         latest = [m for m in metrics if m.fiscal_year == (period_end.year if period_end else None) or "-" in m.period]
-        metric_text, _ = _metric_lines(latest or metrics)
+        metric_text, metric_ids = _metric_lines(latest or metrics)
 
         result = self.services.llm.generate_json(
             prompt=prompts.SYNTHESIS_PROMPT.format(
@@ -604,7 +605,12 @@ class Synthesize:
         values = dict(
             executive_summary=draft.executive_summary,
             investment_thesis=draft.investment_thesis,
-            valuation_summary={"scenarios": [s.model_dump() for s in draft.scenarios]},
+            valuation_summary={"scenarios": [
+                {"name": s.name, "summary": s.summary, "assumptions": [
+                    _resolve_basis(a.model_dump(), claim_ids, metric_ids) for a in s.assumptions
+                ]}
+                for s in draft.scenarios
+            ]},
             risk_summary={"risks": [{**r.model_dump(exclude={"claim_ids"}), "claim_ids": resolve(r.claim_ids)} for r in draft.risks]},
             full_report=full_report,
             data_as_of=period_end,
@@ -619,6 +625,28 @@ class Synthesize:
                 .values(research_job_id=ctx.job_id, created_at=datetime.now(timezone.utc), **values)
                 .on_conflict_do_update(index_elements=["research_job_id"], set_=values)
             )
+
+
+_REF = re.compile(r"\b([CM])(\d+)\b")
+
+
+def _resolve_basis(assumption: dict, claim_ids: dict, metric_ids: dict) -> dict:
+    """Turn the model's handles ("M3", "C5") into words and claim ids a reader can follow."""
+    cited: list[str] = []
+
+    def replace(match: re.Match) -> str:
+        handle = match.group(0)
+        if match.group(1) == "M" and handle in metric_ids:
+            metric = metric_ids[handle]
+            return f"{metric.label} {metric.period} ({format_metric(metric.value, metric.unit)})"
+        if match.group(1) == "C" and handle in claim_ids:
+            claim = claim_ids[handle]
+            cited.append(str(claim.id))
+            return f"claim {claim.position + 1}"  # the number the reader sees in the evidence ledger
+        return handle
+
+    basis = re.sub(r"\s+", " ", _REF.sub(replace, assumption.get("basis", ""))).strip()
+    return {**assumption, "basis": basis, "claim_ids": cited}
 
 
 def research_stages(services: Services | None = None) -> list:

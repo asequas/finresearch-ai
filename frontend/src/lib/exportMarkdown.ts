@@ -5,7 +5,7 @@ export function reportToMarkdown(report: Report): string {
   const number = new Map(report.claims.map((c, i) => [c.id, i + 1]));
   const cite = (ids: string[]) => (ids.length ? ` [${ids.map((id) => number.get(id)).filter(Boolean).join(", ")}]` : "");
   const lines: string[] = [];
-  lines.push(`# ${report.company.name} (${report.company.ticker})`, "", `**${report.headline}**`, "");
+  lines.push(`# ${report.job.company} (${report.company.ticker})`, "", `**${report.headline}**`, "");
   lines.push(`> Question: ${report.job.query}`, "");
   lines.push(`Data as of ${date(report.data_as_of)} · Generated ${date(report.generated_at)} · ${report.verification_summary.supported} of ${report.verification_summary.total} claims supported`, "");
   lines.push("## Answer", "", report.direct_answer, "");
@@ -15,7 +15,7 @@ export function reportToMarkdown(report: Report): string {
   lines.push("", "## Scenarios", "");
   for (const s of report.scenarios) {
     lines.push(`### ${s.name[0]!.toUpperCase()}${s.name.slice(1)}`, "", s.summary, "");
-    for (const a of s.assumptions) lines.push(`- **${a.driver}**: ${a.assumption} _(basis: ${a.basis})_`);
+    for (const a of s.assumptions) lines.push(`- **${a.driver}**: ${a.assumption}${a.basis ? ` _(basis: ${a.basis})_` : ""}`);
     lines.push("");
   }
   lines.push("## Risks", "");

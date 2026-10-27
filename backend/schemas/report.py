@@ -82,6 +82,7 @@ class Assumption(BaseModel):
     driver: str
     assumption: str
     basis: str
+    claim_ids: list[uuid.UUID] = []
 
 
 class Scenario(BaseModel):

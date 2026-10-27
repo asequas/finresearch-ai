@@ -153,6 +153,11 @@ export interface components {
             assumption: string;
             /** Basis */
             basis: string;
+            /**
+             * Claim Ids
+             * @default []
+             */
+            claim_ids: string[];
         };
         /** ClaimOut */
         ClaimOut: {
