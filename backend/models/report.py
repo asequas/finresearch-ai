@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -51,6 +51,27 @@ class Report(Base):
     full_report: Mapped[dict] = mapped_column(
         JSONB,
         nullable=False,
+    )
+
+    data_as_of: Mapped[date | None] = mapped_column(
+        Date,
+        nullable=True,
+    )
+
+    limitations: Mapped[list | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+
+    models_used: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
     )
 
     created_at: Mapped[datetime] = mapped_column(
