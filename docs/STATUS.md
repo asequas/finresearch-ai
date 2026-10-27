@@ -1,6 +1,6 @@
 # FinResearch AI: Status
 
-Last updated: 2026-10-28 (session 1). Branch `build/end-to-end`.
+Last updated: 2026-10-28 (session 1, after the first real runs).
 Labels: **verified** = demonstrated by a test or a command this session; **unverified** = built, not yet demonstrated
 against real external services; **proposed** = not built.
 
@@ -21,22 +21,35 @@ against real external services; **proposed** = not built.
 | Report API and Companies API; evaluation metrics and label scoring | `test_research_pipeline.py` |
 | Frontend: strict TypeScript build; production bundle; all 7 screens pass the design inspector at 1440/768/390 (0 FAIL); light and dark themes; claim, figure and metric inspectors open with the right content | `npm run build`, `inspect.mjs --app`, playwright-cli screenshots |
 
+### Real runs (2026-10-28, live SEC EDGAR + Gemini free tier)
+
+| Company | Outcome | Claims | Quotes verbatim | Numbers match metric | Supported / partly / unsupported |
+| --- | --- | --- | --- | --- | --- |
+| MSFT | completed (re-synthesized after the scenario-basis fix) | 16 | 100% | 100% | 15 / 1 / 0 |
+| COST | completed | 16 | 100% | 100% | 12 / 4 / 0 |
+| NVDA | completed (late-January fiscal year labelled correctly; newer 10-Q included) | 19 | 100% | 100% | 17 / 2 / 0 |
+| JPM | failed on attempt 1, as designed: "financial-sector industry (National Commercial Banks) … not supported" | | | | |
+
+What the real runs proved, beyond the fakes: XBRL extraction on real filings (MSFT FY2022 revenue $198.27B, five
+years, no missing fields); recovery from a real embedding quota (429), a schema bug and two Gemini 503 outages via the
+queue's retries; graceful SIGTERM release and resume-from-checkpoint on live jobs.
+
+What they broke, now fixed and tested: running page headers truncating 10-K sections (81k vs 4.8k characters);
+outdated default model names (Pro has no free-tier quota); embedding quota (100 texts/min) needing pacing; integer
+enums rejected by Gemini's schema format; internal C#/M# handles leaking into scenario text.
+
 ## Implemented but unverified
 
-- **Real SEC EDGAR and Gemini calls.** The client code, rate limiting, caching and error classification are tested
-  against fakes only. Needs `GEMINI_API_KEY` and `SEC_USER_AGENT` in `.env`, then one real run per stage.
-- Gemini model names (`gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-embedding-001`) are configurable defaults; confirm
-  they are available on the free tier for this key.
-- 10-K section splitting on real filings (tested on synthetic HTML only); falls back to indexing the whole document.
-- Prompt quality: claim density, quote fidelity and synthesis quality are unknown until real runs are labelled.
-- Citation correctness ≥ 95%: tooling exists (`backend/evals/citations.py`); no human-labelled set yet.
+- Citation correctness ≥ 95%: automatic metrics are 100% quote verification and numeric consistency on real runs,
+  but no human-labelled set yet (`python -m backend.evals.citations export <job_id>`).
 - Light theme has been checked on the report screen only.
+- Free-tier daily quotas are unknown; each job uses ~150-300 embedding requests (shared filings are indexed once).
 
 ## Known bugs / debt
 
 | # | Severity | Issue |
 | --- | --- | --- |
-| D1 | Medium | Dev database (`finresearch`) is still at revision `411c859e2482` and holds audit-era test junk (62 test users, 51 queued jobs). Upgrading it fails orphaned `running` rows (the migration says so); the queued junk would then be picked up by a worker. Needs a decision before the first real run. |
+| D1 | Low | One intermittent test failure seen once while a live worker shared the machine; it didn't reproduce in 4 reruns. Likely a timing-sensitive worker test under CPU load. |
 | D2 | Low | `StarletteDeprecationWarning` (httpx → httpx2) still present; check `httpx2` provenance before switching. |
 | D3 | Low | A heading-only quote (e.g. "Item 1A. Risk Factors") passes the literal quote check; the LLM judge is the only guard against irrelevant-but-verbatim evidence. |
 | D4 | Low | Debt uses reported long-term debt only (leases and commercial paper excluded); stated in every report's limitations. |
@@ -48,13 +61,11 @@ against real external services; **proposed** = not built.
 Phases 1–4 and 3b: built and verified with fakes. Phase 5 (RAG + verification): built; evaluation pending real data.
 Phase 5b (report reader): built. Phase 6: scope-reduced by decision (no price data). Phase 7 (deploy): deferred by decision.
 
-1. Add the two keys, decide what to do with the dev DB junk (D1), migrate dev to head, run 3–5 real companies. *proposed*
-2. Label the claims from those runs and score citation correctness; tune prompts until the target holds. *proposed*
+1. Label the claims from the real runs and score citation correctness against the 95% target. *proposed*
+2. Tune prompts where the fact-checker flags interpretations as overreaching. *proposed*
 3. CI (GitHub Actions: pytest with a Postgres service, frontend typecheck/build), then deployment design. *proposed*
 
 ## Open decisions
 
-- Dev DB junk (D1): delete audit-era test rows, or keep them and cancel them in bulk.
-- Whether to merge `build/end-to-end` into `main` after a real-data run.
 - Deployment topology and authentication (deferred to the deploy phase).
 - Whether to add a price-data source later (licensing; excluded for v1).
