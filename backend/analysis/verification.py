@@ -1,6 +1,7 @@
 """Deterministic verification checks (ADR 0006): literal quotes and numeric consistency."""
 import re
 import unicodedata
+from difflib import SequenceMatcher
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
@@ -9,7 +10,19 @@ _QUOTE_CHARS = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"', "�
 
 def normalise_text(value: str) -> str:
     value = unicodedata.normalize("NFKC", value).translate(_QUOTE_CHARS).lower()
+    # Table cells split "$" from its number ("$ 39,834" vs "39,834"); the symbol carries no evidence.
+    value = re.sub(r"\$\s*", "", value)
     return re.sub(r"\s+", " ", value).strip()
+
+
+_NUMBER_TOKEN = re.compile(r"^\(?-?[\d,]+(\.\d+)?%?\)?$")
+
+
+def _is_data_row(text: str) -> bool:
+    """A table row: a label and at least two figures, e.g. "AWS 11,434 17,773 33,141"."""
+    tokens = text.split()
+    numbers = sum(bool(_NUMBER_TOKEN.match(t)) for t in tokens)
+    return numbers >= 2 and any(re.search(r"[a-z]", t) for t in tokens)
 
 
 _HEADING_ONLY = re.compile(r"^(part\s+[ivx]+[,.]?\s*)?item\s*\d{1,2}[a-c]?\b[\s.:\-–—]*[a-z'’ ,&]{0,80}$")
@@ -24,11 +37,39 @@ def quote_in_source(quote: str, source: str, min_chars: int = 20, min_words: int
     haystack = normalise_text(source)
     parts = [normalise_text(p).strip(" .,;:") for p in re.split(r"\.\.\.|…|\[\.\.\.\]", quote)]
     parts = [p for p in parts if p]
-    if not parts or sum(len(p) for p in parts) < min_chars:
+    joined = " ".join(parts)
+    if not parts or _HEADING_ONLY.match(joined):
         return False
-    if sum(len(p.split()) for p in parts) < min_words or _HEADING_ONLY.match(" ".join(parts)):
+    # Prose needs enough words to support anything; a table row is evidence however short it is.
+    if not _is_data_row(joined) and (sum(len(p) for p in parts) < min_chars or sum(len(p.split()) for p in parts) < min_words):
         return False
     return all(part in haystack for part in parts)
+
+
+_SENTENCE = re.compile(r"(?<=[.!?;])\s+|\n+")
+
+
+def snap_quote(quote: str, source: str, min_similarity: float = 0.88) -> str | None:
+    """The filing's own sentence that a near-verbatim quote paraphrases, or None.
+
+    Smaller models reword quotes ("increased 27%" for "grew 27%"). If one sentence (or two adjacent ones)
+    of the cited chunk is almost identical, the evidence becomes that exact text; the fact-check then
+    judges what the filing really says. Anything less similar stays a failed quote.
+    """
+    target = normalise_text(quote)
+    if len(target.split()) < 6:
+        return None
+    sentences = [s.strip() for s in _SENTENCE.split(source) if len(s.split()) >= 4]
+    candidates = sentences + [f"{a} {b}" for a, b in zip(sentences, sentences[1:])]
+    best, best_ratio = None, 0.0
+    for candidate in candidates:
+        normalised = normalise_text(candidate)
+        if not 0.6 <= len(normalised) / max(len(target), 1) <= 1.6:
+            continue
+        ratio = SequenceMatcher(None, target, normalised, autojunk=False).ratio()
+        if ratio > best_ratio:
+            best, best_ratio = candidate, ratio
+    return best if best is not None and best_ratio >= min_similarity and quote_in_source(best, source) else None
 
 
 @dataclass(frozen=True)

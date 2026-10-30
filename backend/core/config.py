@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     # Drafting and synthesis are structured extraction from supplied evidence; deep thinking only adds latency.
     gemini_thinking_level: str = "low"
     gemini_embedding_model: str = "gemini-embedding-001"
-    gemini_timeout_seconds: int = 180
+    # Successful drafts take seconds to ~1 minute; a model that will 504 should hand over to the next one sooner.
+    gemini_timeout_seconds: int = 90
     # Free tier: 100 embedding requests per minute, and every text in a batch counts as one request.
     gemini_embed_per_minute: int = 90
     # Second-stage retrieval (ADR 0007): "minilm", "jina-turbo" or "none".
