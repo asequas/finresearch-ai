@@ -10,3 +10,6 @@ requires-python = ">=3.12,<3.13"
 
 [tool.setuptools.packages.find]
 include = ["backend*"]
+[tool.pytest.ini_options]
+markers = ["model: needs the local reranker model download (run with -m model)"]
+addopts = "-m 'not model'"

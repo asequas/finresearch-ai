@@ -141,3 +141,12 @@ class CompanySummary(BaseModel):
     latest_job_status: str
     latest_report_job_id: uuid.UUID | None
     latest_activity_at: datetime
+
+
+class CompanyDetail(BaseModel):
+    company: CompanyOut
+    latest_report_job_id: uuid.UUID | None
+    data_as_of: date | None
+    financials: list[FinancialPeriodOut]
+    metrics: list[MetricOut]
+    jobs: list[ResearchJobResponse]
