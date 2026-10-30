@@ -1,6 +1,6 @@
 # FinResearch AI: Status
 
-Last updated: 2026-10-28 (session 1, after the first real runs).
+Last updated: 2026-10-31 (after the live-demo bug sweep, reranking and the UI pass).
 Labels: **verified** = demonstrated by a test or a command this session; **unverified** = built, not yet demonstrated
 against real external services; **proposed** = not built.
 
@@ -8,7 +8,11 @@ against real external services; **proposed** = not built.
 
 | Area | Evidence |
 | --- | --- |
-| Test suite: 109 tests on an isolated `finresearch_test` database, truncated per test; dev data untouched | `python -m pytest` (dev row counts unchanged before/after) |
+| Test suite: 138 tests (plus 1 opt-in model test) on an isolated `finresearch_test` database; ran 4× under full CPU load with no failures | `python -m pytest`; `-m model` for the real reranker |
+| Retrieval quality: tuned hybrid + MiniLM rerank vs the original hybrid on a 30-question gold set: R@1 0.567→0.733, R@3 0.800→0.900, MRR 0.706→0.811, nDCG@6 0.528→0.626 (ADR 0007) | `python -m backend.evals.retrieval` |
+| Live browser walkthrough (playwright-cli) at 1440/768/390: submit from the palette, live stages, cancel/retry, report, claim/figure/metric inspectors, keyboard Escape + focus return, filters in the URL, Markdown export, company workspace; zero console errors | demo session 2026-10-30/31 |
+| Design gate: 0 FAIL on every route (`inspect.mjs --app`), lint 0 FAIL; Vercel web-interface-guideline findings fixed | automated design inspection, run locally |
+| One-command start with preflight (`scripts/dev.sh`, `python -m backend.core.preflight`) | stopped DB reported as a sentence |
 | Schema: 5 Alembic revisions, each upgrade → downgrade → upgrade round-tripped; `alembic check` clean with full type comparison (no exemptions) | migration commands on the test DB |
 | Durable queue (ADR 0001): exactly one of 10 concurrent claimers wins a job; 5 claimers get 5 distinct jobs; expired leases are reclaimed with a new token; a zombie worker's writes are fenced off | `tests/integration/test_job_queue.py` |
 | Crash recovery: a real worker process killed with SIGKILL mid-job is recovered by a second worker after lease expiry; SIGTERM releases the job without spending an attempt | `tests/integration/test_worker.py` |
@@ -28,6 +32,8 @@ against real external services; **proposed** = not built.
 | MSFT | completed (re-synthesized after the scenario-basis fix) | 16 | 100% | 100% | 15 / 1 / 0 |
 | COST | completed | 16 | 100% | 100% | 12 / 4 / 0 |
 | NVDA | completed (late-January fiscal year labelled correctly; newer 10-Q included) | 19 | 100% | 100% | 17 / 2 / 0 |
+| WMT | completed after the model-chain fix; first reranked report | 20 | 93% | 100% | 15 / 5 / 0 |
+| AMZN | completed on attempt 1 from the UI; after the table-row evidence fix | 16 | 100% | 100% | 14 / 1 / 1 |
 | JPM | failed on attempt 1, as designed: "financial-sector industry (National Commercial Banks) … not supported" | | | | |
 
 What the real runs proved, beyond the fakes: XBRL extraction on real filings (MSFT FY2022 revenue $198.27B, five
@@ -47,23 +53,30 @@ enums rejected by Gemini's schema format; internal C#/M# handles leaking into sc
 
 ## Known bugs / debt
 
+Fixed this round (each found in the live demo or the known list, each with a test): Gemini function-calling warning
+spam; heading-only quotes counting as evidence, and then the over-correction that rejected table rows; paraphrased
+quotes (now snapped to the filing's wording); provider overloads failing jobs (minute-scale backoff, 5 attempts);
+`gemini-flash-latest` hanging 3 minutes per call (removed from the chain; bounded thinking; 90s timeout); Starlette
+httpx warning (httpx2); timing-sensitive worker tests; phone overflow on Research; duplicate "Ticker" labels;
+misleading cancel copy; quote highlight missing for table rows.
+
 | # | Severity | Issue |
 | --- | --- | --- |
-| D1 | Low | One intermittent test failure seen once while a live worker shared the machine; it didn't reproduce in 4 reruns. Likely a timing-sensitive worker test under CPU load. |
-| D2 | Low | `StarletteDeprecationWarning` (httpx → httpx2) still present; check `httpx2` provenance before switching. |
-| D3 | Low | A heading-only quote (e.g. "Item 1A. Risk Factors") passes the literal quote check; the LLM judge is the only guard against irrelevant-but-verbatim evidence. |
-| D4 | Low | Debt uses reported long-term debt only (leases and commercial paper excluded); stated in every report's limitations. |
-| D5 | Low | No CI yet; no structured logging beyond stdlib logging. |
+| D1 | Medium | Gemini free-tier capacity varies a lot by hour (503/504 bursts). Jobs now ride it out, but a burst can stretch a 4-minute job to 10+. Report quality drops when the draft falls back to a lite model (quotes still verified, so weaker claims are flagged, not hidden). |
+| D2 | Low | Reranking costs ~40 s per job on a laptop CPU (7 sub-questions × ~6 s). |
+| D3 | Low | Gold set is 30 questions; differences of one question (0.033) are noise. |
+| D4 | Low | Debt uses reported long-term debt only; stated in every report's limitations. |
+| D5 | Low | No structured logging beyond stdlib; no per-job cost budget. |
 | D6 | Low | Development identity: every request is `dev@finresearch.local`. Ownership checks exist; authentication doesn't. |
 
 ## Current phase + next 3 tasks
 
-Phases 1–4 and 3b: built and verified with fakes. Phase 5 (RAG + verification): built; evaluation pending real data.
-Phase 5b (report reader): built. Phase 6: scope-reduced by decision (no price data). Phase 7 (deploy): deferred by decision.
+Phases 1–5b: built and verified on real data. Phase 6: scope-reduced by decision (no price data). Phase 7 (deploy):
+CI added; deployment and auth deferred by decision.
 
-1. Label the claims from the real runs and score citation correctness against the 95% target. *proposed*
-2. Tune prompts where the fact-checker flags interpretations as overreaching. *proposed*
-3. CI (GitHub Actions: pytest with a Postgres service, frontend typecheck/build), then deployment design. *proposed*
+1. Human-label claims from the six real reports and score citation correctness against the 95% target. *proposed*
+2. Grow the retrieval gold set to 100+ questions across more sectors before tuning weights further. *proposed*
+3. Deployment design (auth, budgets, rate limits, hosting) through the coach protocol. *proposed*
 
 ## Open decisions
 
