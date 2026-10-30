@@ -158,14 +158,18 @@ class GeminiClient:
         Separate models have separate free-tier quotas, and a 503 "high demand" on one rarely
         means all are down. Anything else (bad request, auth) is not a reason to switch.
         """
-        from google.genai import errors
+        from google.genai import errors, types
 
         preferred = self.strong_model if strong else self.fast_model
         chain = [preferred, *[m for m in (self.strong_fallbacks if strong else self.fast_fallbacks) if m != preferred]]
         for index, model in enumerate(chain):
             self.throttle.wait()
+            # Lite models may not accept a thinking level; reasoning models get a bounded one.
+            call_config = config if "lite" in model else config.model_copy(
+                update={"thinking_config": types.ThinkingConfig(thinking_level=settings.gemini_thinking_level)}
+            )
             try:
-                return model, self.client.models.generate_content(model=model, contents=prompt, config=config)
+                return model, self.client.models.generate_content(model=model, contents=prompt, config=call_config)
             except errors.APIError as exc:
                 if exc.code in (429, 500, 503, 504) and index < len(chain) - 1:
                     logger.warning("%s unavailable (%s); falling back to %s", model, exc.code, chain[index + 1])

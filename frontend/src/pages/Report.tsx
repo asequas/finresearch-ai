@@ -1,13 +1,16 @@
-import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { ApiError, type Claim, type Report, useJob, useReport } from "../api/client";
 import { BarChart, LedgerBar, LineChart } from "../components/charts";
 import { DownloadIcon, ExternalIcon, PrintIcon } from "../components/icons";
 import { type InspectTarget, Inspector } from "../components/Inspector";
+import { SectionIndex } from "../components/SectionIndex";
 import { Bar, Button, ButtonLink, Empty, ErrorBlock, Panel, Pill, VerificationPill } from "../components/ui";
 import { download, reportToMarkdown } from "../lib/exportMarkdown";
-import { CLAIM_TYPE_LABEL, FIELD_LABEL, SECTION_LABEL, VERIFICATION_LABEL, date, fieldValue, metricValue, toNumber, usd } from "../lib/format";
+import { useTitle } from "../lib/useTitle";
+import { useToast } from "../components/Toast";
+import { CLAIM_TYPE_LABEL, FIELD_LABEL, SECTION_LABEL, VERIFICATION_LABEL, changeText, date, fieldValue, metricDisplay, metricValue, toNumber, usd, usdTick } from "../lib/format";
 
 const KEY_METRICS = [
   "revenue_growth", "gross_margin", "operating_margin", "net_margin", "free_cash_flow", "fcf_margin",
@@ -20,6 +23,15 @@ const STATEMENT_ROWS = [
 const STATUS_COLOR: Record<string, string> = {
   supported: "var(--positive)", partially_supported: "var(--warning)", unsupported: "var(--negative)", not_verified: "var(--control)",
 };
+const SECTIONS = [
+  { id: "answer", label: "Answer" },
+  { id: "summary", label: "Summary" },
+  { id: "financials", label: "Financials" },
+  { id: "scenarios", label: "Scenarios" },
+  { id: "risks", label: "Risks" },
+  { id: "ledger", label: "Evidence" },
+  { id: "limitations", label: "Limitations" },
+];
 const SEVERITY_TONE = { high: "negative", medium: "warning", low: "neutral" } as const;
 
 function Cite({ ids, numbers, onOpen }: { ids: string[]; numbers: Map<string, number>; onOpen: (id: string) => void }) {
@@ -74,9 +86,25 @@ export function ReportPage() {
 }
 
 function ReportView({ report }: { report: Report }) {
-  const [target, setTarget] = useState<InspectTarget | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const toast = useToast();
+  useTitle(`${report.company.ticker} report`);
+  // Filters and the open claim live in the URL, so a filtered ledger or a claim can be linked and survives reload.
+  const [params, setParams] = useSearchParams();
+  const statusFilter = params.get("status");
+  const typeFilter = params.get("type");
+  const setParam = (key: string, value: string | null) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setParams(next, { replace: true });
+  };
+  const setStatusFilter = (value: string | null) => setParam("status", value);
+  const setTypeFilter = (value: string | null) => setParam("type", value);
+  const [target, setTargetState] = useState<InspectTarget | null>(null);
+  const setTarget = (next: InspectTarget | null) => {
+    setTargetState(next);
+    setParam("claim", next?.kind === "claim" ? String(next.number) : null);
+  };
 
   const numbers = useMemo(() => new Map(report.claims.map((c, i) => [c.id, i + 1])), [report.claims]);
   const claimsById = useMemo(() => new Map(report.claims.map((c) => [c.id, c])), [report.claims]);
@@ -84,6 +112,12 @@ function ReportView({ report }: { report: Report }) {
     const claim = claimsById.get(id);
     if (claim) setTarget({ kind: "claim", claim, number: numbers.get(id)! });
   };
+  useEffect(() => {
+    const n = Number(params.get("claim"));
+    const claim = n ? report.claims[n - 1] : undefined;
+    if (claim && !target) setTargetState({ kind: "claim", claim, number: n });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report.claims]);
   const summary = report.verification_summary;
   const latest = report.financials[report.financials.length - 1];
   const primaryFiling = report.filings.find((f) => f.form === "10-K") ?? report.filings[0];
@@ -110,7 +144,10 @@ function ReportView({ report }: { report: Report }) {
           <p className="mt-1 text-read text-soft">{report.headline}</p>
         </div>
         <div className="no-print flex gap-3">
-          <Button onClick={() => download(`${report.company.ticker}-research-${report.data_as_of ?? "report"}.md`, reportToMarkdown(report))}>
+          <Button onClick={() => {
+            download(`${report.company.ticker}-research-${report.data_as_of ?? "report"}.md`, reportToMarkdown(report));
+            toast("Markdown report downloaded");
+          }}>
             <DownloadIcon /> Markdown
           </Button>
           <Button onClick={() => window.print()}><PrintIcon /> Print or PDF</Button>
@@ -134,7 +171,9 @@ function ReportView({ report }: { report: Report }) {
         <div className="px-6 lg:py-4">
           <dt className="text-small text-muted">Claims supported</dt>
           <dd className="num mt-1 text-card">{summary.supported}<span className="text-muted"> of {summary.total}</span></dd>
-          <dd className="text-small text-muted"><span className="num">{summary.partially_supported}</span> partly · <span className="num">{summary.unsupported}</span> unsupported</dd>
+          <dd className="text-small text-muted">
+            <span className="num">{summary.partially_supported}</span> partly supported, <span className="num">{summary.unsupported}</span> unsupported
+          </dd>
         </div>
         <div className="px-6 lg:py-4">
           <dt className="text-small text-muted">Generated</dt>
@@ -143,11 +182,8 @@ function ReportView({ report }: { report: Report }) {
         </div>
       </dl>
 
-      <p className="no-print -mt-3 mb-6 flex flex-wrap gap-x-5 gap-y-1 lg:hidden">
-        <a href="#limitations" className="text-soft underline-offset-4 hover:underline">Limitations ({report.limitations.length})</a>
-        <a href="#verification" className="text-soft underline-offset-4 hover:underline">How claims were verified</a>
-        <a href="#sources" className="text-soft underline-offset-4 hover:underline">Sources</a>
-      </p>
+
+      <SectionIndex sections={SECTIONS.filter((section) => section.id !== "scenarios" || report.scenarios.length > 0)} />
 
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="grid min-w-0 grid-cols-1 gap-6">
@@ -179,7 +215,7 @@ function ReportView({ report }: { report: Report }) {
             </div>
           </Panel>
 
-          <Panel id="financials" title="Financials" aside={<span>USD · fiscal years · SEC XBRL</span>}>
+          <Panel id="financials" title="Financials" aside={<span>US dollars, fiscal years, from SEC XBRL</span>}>
             <div className="grid grid-cols-1 gap-6 px-6 pb-2 xl:grid-cols-2">
               <figure>
                 <figcaption className="mb-2 flex justify-between text-small text-muted">
@@ -188,12 +224,12 @@ function ReportView({ report }: { report: Report }) {
                     {cagr.label}: <span className="num text-ink">{metricValue(cagr.value, cagr.unit)}</span>
                   </button>}
                 </figcaption>
-                <BarChart title="Revenue by fiscal year" format={(v) => usd(v)}
+                <BarChart title="Revenue by fiscal year" format={(v) => usd(v)} tickFormat={usdTick} changeFormat={(a, b) => changeText(a, b, "pct")}
                   points={report.financials.map((f) => ({ label: f.period, value: toNumber(f.values.revenue?.value) }))} />
               </figure>
               <figure>
                 <figcaption className="mb-2 text-small text-muted">Operating margin</figcaption>
-                <LineChart title="Operating margin by fiscal year" format={(v) => `${(v * 100).toFixed(0)}%`}
+                <LineChart title="Operating margin by fiscal year" format={(v) => `${(v * 100).toFixed(1)}%`} tickFormat={(v) => `${Math.round(v * 100)}%`} changeFormat={(a, b) => changeText(a, b, "pp")}
                   points={periods.map((p) => ({ label: p, value: toNumber(report.metrics.find((m) => m.key === "operating_margin" && m.period === p)?.value) }))} />
               </figure>
             </div>
@@ -249,7 +285,7 @@ function ReportView({ report }: { report: Report }) {
                             {metric ? (
                               <button type="button" onClick={() => setTarget({ kind: "metric", metric })}
                                 className={`press num rounded-[3px] px-1.5 py-1 hover:bg-raised ${p === latest?.period ? "text-ink" : "text-soft"}`}>
-                                {metricValue(metric.value, metric.unit, { sign: row.key.endsWith("growth") })}
+                                {metricDisplay(row.key, metric.value, metric.unit, { sign: row.key.endsWith("growth") })}
                               </button>
                             ) : <span className="num px-1.5 text-muted" title="Inputs not reported for this year">—</span>}
                           </td>
@@ -336,7 +372,7 @@ function ReportView({ report }: { report: Report }) {
           </Panel>
         </div>
 
-        <aside className="grid gap-6 lg:sticky lg:top-8" aria-label="Report trust">
+        <aside className="grid gap-6 lg:sticky lg:top-16" aria-label="Report trust">
           <Panel id="verification" title="Verification">
             <div className="px-6 pb-5">
               <LedgerBar parts={(["supported", "partially_supported", "unsupported", "not_verified"] as const).map((k) => ({
@@ -371,12 +407,15 @@ function ReportView({ report }: { report: Report }) {
                   <a href={f.url} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 hover:underline">
                     <span>{f.form} <span className="num text-muted">{f.accession}</span></span><ExternalIcon />
                   </a>
-                  <span className="text-small text-muted">Period <span className="num">{date(f.period)}</span> · filed <span className="num">{date(f.filed)}</span></span>
+                  <dl className="grid grid-cols-2 text-small">
+                    <dt className="text-muted">Period ended</dt><dd className="num text-right">{date(f.period)}</dd>
+                    <dt className="text-muted">Filed</dt><dd className="num text-right">{date(f.filed)}</dd>
+                  </dl>
                 </li>
               ))}
               <li className="px-6 py-2.5 text-small text-muted">
                 Financial data: SEC XBRL company facts for {report.company.name}, CIK <span className="num">{report.company.cik}</span>
-                {report.company.sic_description ? ` · ${report.company.sic_description}` : ""}
+                {report.company.sic_description ? `. Industry: ${report.company.sic_description}` : ""}
               </li>
             </ul>
           </Panel>
@@ -400,7 +439,7 @@ function ReportView({ report }: { report: Report }) {
 function ClaimRow({ claim, number, onOpen }: { claim: Claim; number: number; onOpen: () => void }) {
   const sourceHint = claim.metrics[0]
     ? `${claim.metrics[0].label} ${claim.metrics[0].period}`
-    : claim.evidence[0] ? `${claim.evidence[0].document.form} · ${claim.evidence[0].quote_verified ? "quote verified" : "quote not found"}` : "no evidence cited";
+    : claim.evidence[0] ? `${claim.evidence[0].document.form}, ${claim.evidence[0].quote_verified ? "quote found verbatim" : "quote not found"}` : "no evidence cited";
   return (
     <li>
       <button type="button" onClick={onOpen}
@@ -408,7 +447,7 @@ function ClaimRow({ claim, number, onOpen }: { claim: Claim; number: number; onO
         <span className="num pt-px text-muted">{number}</span>
         <span className={claim.verification_status === "unsupported" ? "text-muted" : ""}>{claim.text}</span>
         <VerificationPill status={claim.verification_status} />
-        <span className="col-start-2 text-small text-muted">{CLAIM_TYPE_LABEL[claim.claim_type]} · {sourceHint}</span>
+        <span className="col-start-2 text-small text-muted">{CLAIM_TYPE_LABEL[claim.claim_type]}. Source: {sourceHint}</span>
       </button>
     </li>
   );

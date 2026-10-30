@@ -124,6 +124,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/companies/{ticker}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Company */
+        get: operations["get_company_api_v1_companies__ticker__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/meta": {
         parameters: {
             query?: never;
@@ -185,6 +202,20 @@ export interface components {
             /** Metrics */
             metrics: components["schemas"]["MetricOut"][];
         };
+        /** CompanyDetail */
+        CompanyDetail: {
+            company: components["schemas"]["CompanyOut"];
+            /** Latest Report Job Id */
+            latest_report_job_id: string | null;
+            /** Data As Of */
+            data_as_of: string | null;
+            /** Financials */
+            financials: components["schemas"]["FinancialPeriodOut"][];
+            /** Metrics */
+            metrics: components["schemas"]["MetricOut"][];
+            /** Jobs */
+            jobs: components["schemas"]["ResearchJobResponse"][];
+        };
         /** CompanyOut */
         CompanyOut: {
             /**
@@ -210,6 +241,8 @@ export interface components {
         /** CompanySummary */
         CompanySummary: {
             company: components["schemas"]["CompanyOut"];
+            /** Display Name */
+            display_name: string;
             /** Job Count */
             job_count: number;
             /**
@@ -323,6 +356,10 @@ export interface components {
             /** Max Attempts */
             max_attempts: number;
             queue: components["schemas"]["QueueInfo"];
+            /** Stage Timings */
+            stage_timings: components["schemas"]["StageTiming"][];
+            /** Reranker */
+            reranker: string;
         };
         /** MetricOut */
         MetricOut: {
@@ -452,6 +489,11 @@ export interface components {
             /** Lease Expires At */
             lease_expires_at: string | null;
             /**
+             * Run After
+             * Format: date-time
+             */
+            run_after: string;
+            /**
              * Created At
              * Format: date-time
              */
@@ -510,6 +552,11 @@ export interface components {
             cancel_requested: boolean;
             /** Lease Expires At */
             lease_expires_at: string | null;
+            /**
+             * Run After
+             * Format: date-time
+             */
+            run_after: string;
             /**
              * Created At
              * Format: date-time
@@ -585,6 +632,15 @@ export interface components {
             input_tokens: number | null;
             /** Output Tokens */
             output_tokens: number | null;
+        };
+        /** StageTiming */
+        StageTiming: {
+            /** Stage */
+            stage: string;
+            /** Median Ms */
+            median_ms: number;
+            /** Samples */
+            samples: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -899,6 +955,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CompanySummary"][];
+                };
+            };
+        };
+    };
+    get_company_api_v1_companies__ticker__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyDetail"];
+                };
+            };
+            /** @description No research on this company yet */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

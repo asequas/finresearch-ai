@@ -5,6 +5,7 @@ import { JobRows, JobRowsLoading } from "../components/JobRows";
 import { ResearchForm } from "../components/ResearchForm";
 import { Button, Empty, ErrorBlock, PageTitle, Panel } from "../components/ui";
 import { STATUS_LABEL } from "../lib/format";
+import { useTitle } from "../lib/useTitle";
 
 const FILTERS: (JobStatus | undefined)[] = [undefined, "running", "queued", "completed", "failed", "cancelled"];
 
@@ -12,6 +13,7 @@ export function Research() {
   const [params, setParams] = useSearchParams();
   const status = (params.get("status") as JobStatus | null) ?? undefined;
   const ticker = params.get("ticker") ?? "";
+  useTitle("Research");
   const jobs = useJobs({ status, ticker });
   const rows = jobs.data?.pages.flatMap((p) => p.items) ?? [];
 
@@ -25,9 +27,9 @@ export function Research() {
   return (
     <>
       <PageTitle title="Research" sub="Ask a question about a US-listed company. The answer is built from its SEC filings, and every claim links to its evidence." />
-      <div className="grid gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <Panel id="ask" title="New research">
-          <ResearchForm />
+          <ResearchForm initialTicker={params.get("new") ?? undefined} initialCompany={params.get("company") ?? undefined} />
         </Panel>
 
         <Panel id="history" title="Job history">
@@ -42,8 +44,8 @@ export function Research() {
               ))}
             </div>
             <label className="mb-2 flex items-center gap-2 text-muted">
-              <span>Ticker</span>
-              <input value={ticker} onChange={(e) => set("ticker", e.target.value.toUpperCase())} spellCheck={false}
+              <span>Filter by ticker</span>
+              <input value={ticker} onChange={(e) => set("ticker", e.target.value.toUpperCase())} spellCheck={false} name="ticker-filter" autoComplete="off" translate="no"
                 className="num h-8 w-24 rounded-[6px] border border-control bg-transparent px-2 text-ink uppercase focus:border-accent focus:outline-none" />
             </label>
           </div>

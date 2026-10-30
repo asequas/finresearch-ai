@@ -14,6 +14,7 @@ export type Evidence = components["schemas"]["EvidenceOut"];
 export type Filing = components["schemas"]["FilingOut"];
 export type FinancialPeriod = components["schemas"]["FinancialPeriodOut"];
 export type CompanySummary = components["schemas"]["CompanySummary"];
+export type CompanyDetail = components["schemas"]["CompanyDetail"];
 export type Meta = components["schemas"]["MetaResponse"];
 export type CreateRequest = components["schemas"]["ResearchCreateRequest"];
 
@@ -90,6 +91,16 @@ export function useReport(jobId: string, enabled = true) {
 
 export function useCompanies() {
   return useQuery({ queryKey: ["companies"], queryFn: () => unwrap(api.GET("/api/v1/companies")) });
+}
+
+export function useCompany(ticker: string) {
+  return useQuery({
+    queryKey: ["company", ticker],
+    queryFn: () => unwrap(api.GET("/api/v1/companies/{ticker}", { params: { path: { ticker } } })),
+    retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
+    refetchInterval: (query) =>
+      query.state.data?.jobs.some((j) => isActive(j.status)) ? 3000 : false,
+  });
 }
 
 export function useMeta() {

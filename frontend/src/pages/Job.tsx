@@ -6,6 +6,8 @@ import { CheckIcon, CrossIcon } from "../components/icons";
 import { StageStrip, stageStates } from "../components/StageStrip";
 import { Bar, Button, ButtonLink, ErrorBlock, Kv, Notice, PageTitle, Panel, StatusPill } from "../components/ui";
 import { STAGES, dateTime, duration, elapsed } from "../lib/format";
+import { useTitle } from "../lib/useTitle";
+import { useToast } from "../components/Toast";
 
 function useNow(active: boolean) {
   const [now, setNow] = useState(Date.now());
@@ -21,6 +23,7 @@ export function JobPage() {
   const { jobId = "" } = useParams();
   const job = useJob(jobId);
   const meta = useMeta();
+  const toast = useToast();
   const cancel = useJobAction("cancel");
   const retry = useJobAction("retry");
   const live = !!job.data && isActive(job.data.status);
@@ -42,13 +45,24 @@ export function JobPage() {
   const waitingSeconds = data?.status === "queued" ? (Date.now() - new Date(data.created_at).getTime()) / 1000 : 0;
   const noWorker = data?.status === "queued" && waitingSeconds > 20 && meta.data?.queue.running === 0;
 
+  useTitle(data ? `${data.ticker} research` : "Research job");
+  const typical = new Map((meta.data?.stage_timings ?? []).map((t) => [t.stage, t.median_ms]));
+  const typicalTotal = STAGES.reduce((sum, s) => sum + (typical.get(s.key) ?? 0), 0);
+  const completedStages = (data?.stages ?? []).filter((r) => r.status === "completed").length;
+  const remainingMs = data ? STAGES.filter((s) => states?.[s.key] !== "done").reduce((sum, s) => sum + (typical.get(s.key) ?? 0), 0) : 0;
+  const retryIn = data?.status === "queued" && data.attempts > 0 ? Math.max(0, new Date(data.run_after).getTime() - Date.now()) : 0;
+
   const sub = !data ? undefined
     : data.status === "completed" ? `Completed in ${elapsed(data.started_at, data.completed_at)}. The report is ready.`
     : data.status === "failed" ? data.error_message
-    : data.status === "cancelled" ? "Cancelled. Completed stages are kept, so a retry resumes where it stopped."
-    : data.status === "queued" && data.attempts > 0 ? `Retrying soon (attempt ${data.attempts + 1} of ${data.max_attempts}). Last error: ${data.error_message}`
+    : data.status === "cancelled" ? (completedStages > 0
+        ? `Cancelled after ${completedStages} of 8 stages. Those stages are kept, so a retry resumes where it stopped.`
+        : "Cancelled before any work started. Retry to queue it again.")
+    : data.status === "queued" && data.attempts > 0
+      ? `${retryIn > 0 ? `Retrying in ${duration(retryIn)}` : "Retrying now"} (attempt ${data.attempts + 1} of ${data.max_attempts}). ${data.error_message ?? ""}`
+    : data.status === "queued" && typicalTotal > 0 ? `Waiting for a worker. Research usually takes about ${Math.max(1, Math.round(typicalTotal / 60000))} min.`
     : data.status === "queued" ? "Waiting for a worker to pick this up."
-    : `Running for ${elapsed(data.started_at)} · ${STAGES.find((s) => s.key === data.current_stage)?.label ?? "starting"}`;
+    : `Running for ${elapsed(data.started_at)}, now on ${STAGES.find((s) => s.key === data.current_stage)?.label.toLowerCase() ?? "the first stage"}.${remainingMs > 60000 ? ` About ${Math.round(remainingMs / 60000)} min left.` : ""}`;
 
   return (
     <>
@@ -56,15 +70,17 @@ export function JobPage() {
         <Link to="/research" className="hover:text-ink">Research</Link> <span aria-hidden="true">/</span> <span className="num">{data?.ticker ?? "…"}</span>
       </nav>
       <PageTitle
-        title={data ? `${data.ticker} · ${data.company}` : <Bar w={320} h={28} />}
+        title={data ? <>{data.company} <span className="font-normal text-muted" translate="no">{data.ticker}</span></> : <Bar w={320} h={28} />}
         sub={sub}
         actions={data && (
           <>
             {isActive(data.status) && !data.cancel_requested && (
-              <Button onClick={() => cancel.mutate(data.id)} disabled={cancel.isPending}>Cancel</Button>
+              <Button onClick={() => cancel.mutate(data.id, { onSuccess: () => toast(data.status === "running" ? "Stopping after the current stage" : "Research cancelled") })}
+                disabled={cancel.isPending}>Cancel research</Button>
             )}
             {(data.status === "failed" || data.status === "cancelled") && (
-              <Button variant="primary" onClick={() => retry.mutate(data.id)} disabled={retry.isPending}>Retry</Button>
+              <Button variant="primary" onClick={() => retry.mutate(data.id, { onSuccess: () => toast("Research queued again") })}
+                disabled={retry.isPending}>Retry research</Button>
             )}
             {data.has_report && <ButtonLink to={`/reports/${data.id}`} variant="primary">Open report</ButtonLink>}
           </>
@@ -110,7 +126,8 @@ export function JobPage() {
                   </span>
                   <span className="num text-right text-small text-muted">
                     {state === "running" && run ? elapsed(run.started_at)
-                      : run?.duration_ms != null ? duration(run.duration_ms) : "—"}
+                      : run?.duration_ms != null ? duration(run.duration_ms)
+                      : typical.get(stage.key) ? <span title="Typical duration">~{duration(typical.get(stage.key)!)}</span> : "—"}
                     {run && run.attempt > 1 && <span className="block">attempt {run.attempt}</span>}
                     {run?.input_tokens != null && <span className="block">{(run.input_tokens + (run.output_tokens ?? 0)).toLocaleString()} tok</span>}
                   </span>

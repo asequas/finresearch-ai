@@ -5,11 +5,13 @@ import { JobRows, JobRowsLoading } from "../components/JobRows";
 import { ResearchForm } from "../components/ResearchForm";
 import { Empty, ErrorBlock, Notice, PageTitle, Panel } from "../components/ui";
 import { duration, relative } from "../lib/format";
+import { useTitle } from "../lib/useTitle";
 
 /** The screen's question: what is running, and what is ready to read? */
 export function Overview() {
   const jobs = useJobs({ limit: 30 });
   const meta = useMeta();
+  useTitle("Overview");
   const all = jobs.data?.pages.flatMap((p) => p.items) ?? [];
   const active = all.filter((j) => isActive(j.status));
   const ready = all.filter((j) => j.has_report).slice(0, 6);
@@ -18,7 +20,7 @@ export function Overview() {
   const finding = jobs.isPending
     ? "Loading your research desk…"
     : active.length
-      ? `${active.length} ${active.length === 1 ? "job is" : "jobs are"} in progress${ready[0] ? ` · latest report ${ready[0].ticker}, ${relative(ready[0].completed_at)}` : ""}.`
+      ? `${active.length} ${active.length === 1 ? "job is" : "jobs are"} in progress.${ready[0] ? ` Latest report: ${ready[0].ticker}, ${relative(ready[0].completed_at)}.` : ""}`
       : ready[0]
         ? `Nothing running. Latest report: ${ready[0].ticker}, ${relative(ready[0].completed_at)}.`
         : "No research yet. Start with a ticker and a question.";
