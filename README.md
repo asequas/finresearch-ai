@@ -1,5 +1,7 @@
 # FinResearch AI
 
+[![CI](https://github.com/asequas/finresearch-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/asequas/finresearch-ai/actions/workflows/ci.yml)
+
 Evidence-backed research on US-listed companies. Ask a question about a ticker; FinResearch reads the company's
 SEC filings, computes its financials with tested formulas, drafts claims, checks every claim against its source,
 and writes a report in which any statement opens to the passage, figure or formula behind it.
