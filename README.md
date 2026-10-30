@@ -7,6 +7,19 @@ and writes a report in which any statement opens to the passage, figure or formu
 It's decision support, not a stock picker: unsupported claims are flagged, limitations are listed, and nothing
 recommends buying or selling.
 
+## Tour
+
+Real research on Amazon's 10-K and 10-Q, run end to end through the app.
+
+| | |
+| --- | --- |
+| ![Overview](docs/screenshots/overview.png) | ![Live job](docs/screenshots/job-live.png) |
+| **Overview.** What's running and what's ready; ⌘K searches every company, report and job. | **Live job.** Eight checkpointed stages with typical durations; leave and come back any time. |
+| ![Report](docs/screenshots/report.png) | ![Claim inspector](docs/screenshots/claim-inspector.png) |
+| **Report.** The answer first, then summary, financials, scenarios, risks and the evidence ledger. | **Claim inspector.** Every claim opens to the filing passage with the quoted words highlighted. |
+| ![Company workspace](docs/screenshots/company.png) | ![Phone](docs/screenshots/phone-report.png) |
+| **Company workspace.** Five years of reported figures and every report on the company. | **Phone.** The same report, laid out for a small screen. |
+
 ## What makes it trustworthy
 
 - **Facts, calculations and interpretations are kept apart.** Facts must quote the filing verbatim; calculations
@@ -39,7 +52,7 @@ completed stage.
 | Extract financials | deterministic | five fiscal years from XBRL, latest filing wins on restatement |
 | Compute metrics | deterministic | margins, FCF, growth, ROE, leverage, CAGR, each with formula and inputs |
 | Index filings | deterministic + embeddings | section-aware chunks, `tsvector` + HNSW `vector(768)` |
-| Analyze | LLM | sub-questions, hybrid retrieval (RRF), drafted claims with quotes and metric refs |
+| Analyze | retrieval + LLM | sub-questions, tuned hybrid retrieval reranked by a local cross-encoder, drafted claims |
 | Verify | code first, then LLM | quote check, numeric check, fact-check verdicts |
 | Synthesize | LLM | answer, summary, bull/base/bear with anchored assumptions, risks, limitations |
 
@@ -49,11 +62,28 @@ Design decisions, alternatives and failure modes are written up as ADRs in [`doc
 [202 + idempotency keys](docs/adr/0003-submission-contract-and-idempotency.md) ·
 [enum storage](docs/adr/0004-enum-storage.md) ·
 [evidence and provenance model](docs/adr/0005-evidence-and-provenance-model.md) ·
-[pipeline, retrieval and LLM use](docs/adr/0006-research-pipeline-retrieval-and-llm.md).
+[pipeline, retrieval and LLM use](docs/adr/0006-research-pipeline-retrieval-and-llm.md) ·
+[retrieval tuning and reranking](docs/adr/0007-retrieval-tuning-and-reranking.md).
+
+Retrieval quality on a 30-question gold set over real filings (ADR 0007):
+
+| | Recall@1 | Recall@3 | MRR@10 | nDCG@6 |
+| --- | --- | --- | --- | --- |
+| Hybrid search as first built | 0.567 | 0.800 | 0.706 | 0.528 |
+| Tuned hybrid + cross-encoder rerank | **0.733** | **0.900** | **0.811** | **0.626** |
 
 ## Run it locally
 
 Requirements: Python 3.12, Node 22+, Docker.
+
+Once set up (below), one command starts the database, migrations, API, a worker and the UI, and explains anything
+that's missing:
+
+```bash
+scripts/dev.sh        # UI on http://localhost:5173
+```
+
+First-time setup:
 
 ```bash
 # 1. Database
@@ -97,6 +127,7 @@ XBRL extraction, filing parsing, and the full pipeline end to end with a fake SE
 ## Evaluation
 
 ```bash
+python -m backend.evals.retrieval                          # retrieval quality: vector vs keyword vs hybrid vs reranked
 python -m backend.evals.citations auto <job_id>            # coverage, quote verification, numeric consistency
 python -m backend.evals.citations export <job_id> > evals/labels/MSFT.json
 python -m backend.evals.citations score evals/labels/*.json # human-labelled citation correctness vs the 95% target
