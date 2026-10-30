@@ -7,8 +7,10 @@ class Settings(BaseSettings):
     # Worker / queue (ADR 0001)
     worker_lease_seconds: int = 60
     worker_poll_interval_seconds: float = 1.0
-    job_max_attempts: int = 3
+    job_max_attempts: int = 5
     job_retry_base_seconds: int = 15
+    # Provider overloads (429/5xx) last minutes: 60s, 120s, 240s… capped at 10 minutes.
+    job_busy_retry_base_seconds: int = 60
 
     # Research pipeline
     pipeline: str = "research"  # "research" or "stub" (Phase 3 stub stages)

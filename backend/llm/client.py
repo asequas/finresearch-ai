@@ -12,7 +12,7 @@ from pydantic import BaseModel, ValidationError
 
 from backend.core.config import settings
 from backend.models.document_chunk import EMBEDDING_DIMENSION
-from backend.pipeline.base import PermanentError, RetryableError
+from backend.pipeline.base import PermanentError, ProviderBusyError, RetryableError
 
 T = TypeVar("T", bound=BaseModel)
 logger = logging.getLogger(__name__)
@@ -117,7 +117,9 @@ class GeminiClient:
         if exc.code in (401, 403):
             raise PermanentError("The Gemini API key was rejected. Check GEMINI_API_KEY in .env.") from exc
         if exc.code == 429:
-            raise RetryableError(f"Gemini quota reached ({message}). Retrying after a pause.") from exc
+            raise ProviderBusyError(f"Gemini's free-tier quota is used up for now ({message}).") from exc
+        if exc.code in (500, 502, 503, 504):
+            raise ProviderBusyError(f"Gemini is overloaded (HTTP {exc.code}). This usually clears within minutes.") from exc
         raise RetryableError(f"Gemini API {exc.code}: {message}") from exc
 
     def generate_json(
@@ -130,6 +132,8 @@ class GeminiClient:
             temperature=temperature,
             response_mime_type="application/json",
             response_schema=schema,
+            # We never pass tools; AFC only adds a code path and a warning on every call.
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         )
         last_error: Exception | None = None
         for _ in range(2):  # one repair attempt for malformed output

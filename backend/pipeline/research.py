@@ -16,7 +16,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from backend.analysis.chunking import chunk_text
-from backend.analysis.metrics import FinancialPeriod, compute_metrics, format_metric
+from backend.analysis.metrics import FinancialPeriod, compute_metrics, describe_metric, format_metric
 from backend.analysis.retrieval import RetrievedChunk, hybrid_search
 from backend.analysis.verification import quote_in_source, unmatched_numbers
 from backend.core.config import settings
@@ -123,7 +123,7 @@ def _metric_lines(metrics: list[CalculatedMetric]) -> tuple[str, dict[str, Calcu
     for i, metric in enumerate(metrics, start=1):
         ids[f"M{i}"] = metric
         lines.append(
-            f"M{i}: {metric.label} {metric.period} = {format_metric(metric.value, metric.unit)} ({metric.formula})"
+            f"M{i}: {metric.label} {metric.period} = {describe_metric(metric.metric_key, metric.value, metric.unit)} ({metric.formula})"
         )
     return "\n".join(lines) or "(no metrics available)", ids
 
@@ -471,7 +471,7 @@ class Verify:
                 if stray:
                     decided[claim.id] = ("unsupported", f"Numbers {', '.join(stray)} don't match the cited metric.")
                 else:
-                    shown = ", ".join(f"{m.label} {m.period} = {format_metric(m.value, m.unit)}" for m in referenced)
+                    shown = ", ".join(f"{m.label} {m.period} = {describe_metric(m.metric_key, m.value, m.unit)}" for m in referenced)
                     decided[claim.id] = ("supported", f"Matches computed metric: {shown}.")
             elif claim.claim_type == "fact" and not quotes_by_claim.get(claim.id):
                 decided[claim.id] = ("unsupported", "No cited quote was found verbatim in the filing.")
@@ -486,7 +486,7 @@ class Verify:
                 material = [f'  quote: "{q}"' for q in quotes_by_claim.get(claim.id, [])]
                 for metric_id in claim_metric_ids.get(claim.id, []):
                     m = metrics_by_id[metric_id]
-                    material.append(f"  metric: {m.label} {m.period} = {format_metric(m.value, m.unit)}")
+                    material.append(f"  metric: {m.label} {m.period} = {describe_metric(m.metric_key, m.value, m.unit)}")
                 blocks.append(f"C{i} [{claim.claim_type}] {claim.claim_text}\n" + "\n".join(material))
             judged = self.services.llm.generate_json(
                 prompt=prompts.JUDGE_PROMPT.format(claims="\n\n".join(blocks)),
@@ -638,7 +638,7 @@ def _resolve_basis(assumption: dict, claim_ids: dict, metric_ids: dict) -> dict:
         handle = match.group(0)
         if match.group(1) == "M" and handle in metric_ids:
             metric = metric_ids[handle]
-            return f"{metric.label} {metric.period} ({format_metric(metric.value, metric.unit)})"
+            return f"{metric.label} {metric.period} ({describe_metric(metric.metric_key, metric.value, metric.unit)})"
         if match.group(1) == "C" and handle in claim_ids:
             claim = claim_ids[handle]
             cited.append(str(claim.id))

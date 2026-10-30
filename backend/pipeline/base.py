@@ -17,6 +17,10 @@ class RetryableError(Exception):
     """Transient failure (network, rate limit, 5xx). The job is retried with backoff."""
 
 
+class ProviderBusyError(RetryableError):
+    """The provider is overloaded or out of quota (429/5xx). Outages last minutes, so back off in minutes."""
+
+
 class PermanentError(Exception):
     """Failure that retrying cannot fix. The message is shown to the user."""
 

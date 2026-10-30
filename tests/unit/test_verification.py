@@ -4,7 +4,7 @@ import pytest
 
 from backend.analysis.verification import extract_numbers, quote_in_source, unmatched_numbers
 
-SOURCE = """The Company’s products and services include iPhone,  Mac, iPad.
+SOURCE = """PART I Item 1. Business\nItem 1A. Risk Factors\nThe Company’s products and services include iPhone,  Mac, iPad.
 Net sales increased 2% or $8.0 billion during 2024 compared to 2023 —
 driven by higher Services revenue."""
 
@@ -17,6 +17,9 @@ driven by higher Services revenue."""
         ("Net sales increased 2% ... driven by higher Services revenue", True),
         ("Net sales increased 5% or $8.0 billion during 2024", False),
         ("iPhone", False),  # too short to be meaningful evidence
+        ("Item 1A. Risk Factors", False),  # a heading is verbatim but supports nothing
+        ("PART I Item 1. Business", False),
+        ("products and services include iPhone", False),  # five words: too thin
         ("", False),
     ],
 )
