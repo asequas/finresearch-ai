@@ -12,3 +12,4 @@ google-genai==2.19.0
 
 # Tests
 pytest==9.1.1
+httpx2==2.16.0  # Starlette 1.x TestClient transport (same author as httpx)

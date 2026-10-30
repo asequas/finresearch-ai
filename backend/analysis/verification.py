@@ -12,12 +12,21 @@ def normalise_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
-def quote_in_source(quote: str, source: str, min_chars: int = 20) -> bool:
-    """Every ellipsis-separated part of the quote must appear verbatim (whitespace/quote-normalised)."""
+_HEADING_ONLY = re.compile(r"^(part\s+[ivx]+[,.]?\s*)?item\s*\d{1,2}[a-c]?\b[\s.:\-–—]*[a-z'’ ,&]{0,80}$")
+
+
+def quote_in_source(quote: str, source: str, min_chars: int = 20, min_words: int = 6) -> bool:
+    """Every ellipsis-separated part of the quote must appear verbatim (whitespace/quote-normalised).
+
+    A section heading ("Item 1A. Risk Factors") is verbatim but supports nothing, and fragments of
+    a few words prove little, so both are rejected.
+    """
     haystack = normalise_text(source)
     parts = [normalise_text(p).strip(" .,;:") for p in re.split(r"\.\.\.|…|\[\.\.\.\]", quote)]
     parts = [p for p in parts if p]
     if not parts or sum(len(p) for p in parts) < min_chars:
+        return False
+    if sum(len(p.split()) for p in parts) < min_words or _HEADING_ONLY.match(" ".join(parts)):
         return False
     return all(part in haystack for part in parts)
 

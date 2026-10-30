@@ -159,7 +159,8 @@ def test_lost_lease_mid_stage_abandons_without_writes(make_job):
 
 def test_heartbeat_keeps_long_stage_alive(make_job):
     job = make_job()
-    _worker([SleepStage(name=ResearchStage.ANALYZING, seconds=2.5)], lease_seconds=1.5).run_once()
+    # The stage outlives three lease lengths; only the heartbeat can keep the job.
+    _worker([SleepStage(name=ResearchStage.ANALYZING, seconds=6)], lease_seconds=2).run_once()
 
     assert _get(job.id).status == ResearchJobStatus.COMPLETED
     assert _get(job.id).attempts == 1
@@ -189,10 +190,13 @@ def test_worker_crash_is_recovered_by_another_worker(make_job):
 
     crashed = _get(job.id)
     assert crashed.status == ResearchJobStatus.RUNNING
-    time.sleep(2.5)  # lease expires
-
+    # Poll instead of sleeping a fixed time: the lease may have been renewed just before the kill.
     stage = ScriptedStage(name=ResearchStage.RESOLVING_COMPANY)
-    assert _worker([stage]).run_once() is True
+    recovery = _worker([stage])
+    deadline = time.monotonic() + 15
+    while not recovery.run_once():
+        assert time.monotonic() < deadline, "the expired lease was never reclaimed"
+        time.sleep(0.25)
 
     recovered = _get(job.id)
     assert recovered.status == ResearchJobStatus.COMPLETED
@@ -217,3 +221,15 @@ def test_sigterm_releases_job_for_another_worker(make_job):
     released = _get(job.id)
     assert released.status == ResearchJobStatus.QUEUED
     assert released.attempts == 0
+
+
+def test_provider_busy_errors_back_off_in_minutes(make_job):
+    from backend.pipeline.base import ProviderBusyError
+
+    job = make_job()
+    stage = ScriptedStage(name=ResearchStage.ANALYZING, failures=1, error=ProviderBusyError)
+    Worker(stages_factory=lambda: [stage], retry_base_seconds=0, busy_retry_base_seconds=60).run_once()
+
+    retried = _get(job.id)
+    assert retried.status == ResearchJobStatus.QUEUED
+    assert (retried.run_after - retried.updated_at).total_seconds() >= 45  # ~60s with jitter, not seconds

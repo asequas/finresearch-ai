@@ -2,7 +2,7 @@ from decimal import Decimal as D
 
 import pytest
 
-from backend.analysis.metrics import FinancialPeriod, compute_metrics, format_metric, format_usd
+from backend.analysis.metrics import FinancialPeriod, compute_metrics, describe_metric, format_metric, format_usd
 
 
 def period(year, **values):
@@ -129,3 +129,9 @@ def test_format_usd(amount, expected):
 def test_format_metric_units():
     assert format_metric(D("0.4462"), "ratio") == "44.6%"
     assert format_metric(D("2.345"), "times") == "2.34x"
+
+
+def test_negative_net_debt_is_described_as_net_cash():
+    assert describe_metric("net_debt", D("-2140000000"), "USD") == "net cash of $2.14B"
+    assert describe_metric("net_debt", D("350000000"), "USD") == "$350.00M"
+    assert describe_metric("operating_margin", D("0.468"), "ratio") == "46.8%"
