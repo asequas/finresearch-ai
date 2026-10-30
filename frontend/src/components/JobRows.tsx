@@ -23,7 +23,7 @@ export function JobRows({ jobs, showStrip = true }: { jobs: Job[]; showStrip?: b
             to={job.has_report ? `/reports/${job.id}` : `/research/${job.id}`}
             className="press grid grid-cols-[64px_1fr_auto] items-center gap-x-4 gap-y-1.5 px-6 py-3 hover:bg-raised md:grid-cols-[72px_minmax(0,1fr)_200px_112px]"
           >
-            <span className="num font-medium">{job.ticker}</span>
+            <span className="num font-medium" translate="no">{job.ticker}</span>
             <span className="min-w-0">
               <span className="block truncate">{job.company}</span>
               <span className="block truncate text-muted">{job.query}</span>

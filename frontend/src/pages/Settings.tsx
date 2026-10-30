@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { useMeta } from "../api/client";
 import { CheckIcon, CrossIcon } from "../components/icons";
 import { Bar, ErrorBlock, Kv, PageTitle, Panel } from "../components/ui";
+import { useTitle } from "../lib/useTitle";
 
 type Theme = "system" | "dark" | "light";
 
@@ -40,6 +41,7 @@ function Check({ ok, children, fix }: { ok: boolean | undefined; children: strin
 
 export function Settings() {
   const meta = useMeta();
+  useTitle("Settings");
   const [theme, setTheme] = useState<Theme>(readTheme);
   useEffect(() => applyTheme(theme), [theme]);
 
@@ -86,7 +88,7 @@ export function Settings() {
               <Kv label="Pipeline">{meta.data?.pipeline === "stub" ? "Stub (no external calls)" : "SEC EDGAR + Gemini"}</Kv>
               <Kv label="Routine steps"><span className="num">{meta.data?.models.fast ?? "—"}</span></Kv>
               <Kv label="Drafting and synthesis"><span className="num">{meta.data?.models.strong ?? "—"}</span></Kv>
-              <Kv label="Embeddings"><span className="num">{meta.data?.models.embedding ?? "—"}</span> <span className="text-muted">· 768-d</span></Kv>
+              <Kv label="Embeddings"><span className="num">{meta.data?.models.embedding ?? "—"}</span> <span className="text-muted">(768 dimensions)</span></Kv>
             </dl>
           </Panel>
         </Area>
@@ -108,7 +110,7 @@ export function Settings() {
 
 function Area({ title, description, children }: { title: string; description: ReactNode; children: ReactNode }) {
   return (
-    <section className="grid grid-cols-1 gap-3 md:grid-cols-[280px_minmax(0,1fr)] md:gap-8" aria-label={title}>
+    <section className="grid grid-cols-1 gap-3 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-8" aria-label={title}>
       <div>
         <h2 className="text-card font-semibold">{title}</h2>
         <p className="mt-1 text-muted">{description}</p>

@@ -3,9 +3,11 @@ import { Link } from "react-router-dom";
 import { useCompanies } from "../api/client";
 import { Bar, ButtonLink, Empty, ErrorBlock, PageTitle, Panel, StatusPill } from "../components/ui";
 import { relative } from "../lib/format";
+import { useTitle } from "../lib/useTitle";
 
 export function Companies() {
   const companies = useCompanies();
+  useTitle("Companies");
 
   return (
     <>
@@ -29,11 +31,11 @@ export function Companies() {
                 </tr>
               </thead>
               <tbody>
-                {companies.data.map(({ company, job_count, latest_job_id, latest_job_status, latest_report_job_id, latest_activity_at }) => (
+                {companies.data.map(({ company, display_name, job_count, latest_job_id, latest_job_status, latest_report_job_id, latest_activity_at }) => (
                   <tr key={company.id} className="border-t border-rule">
                     <td className="px-6 py-3">
-                      <span className="block">{company.name}</span>
-                      <span className="num text-small text-muted">{company.ticker}{company.exchange ? ` · ${company.exchange}` : ""}</span>
+                      <Link to={`/companies/${company.ticker}`} className="block font-medium hover:underline">{display_name}</Link>
+                      <span className="num text-small text-muted" translate="no">{company.ticker}{company.exchange ? ` on ${company.exchange}` : ""}</span>
                     </td>
                     <td className="max-w-[260px] truncate py-3 text-soft">{company.sic_description ?? "—"}</td>
                     <td className="num py-3 text-right text-muted">{company.cik}</td>

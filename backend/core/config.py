@@ -19,8 +19,12 @@ class Settings(BaseSettings):
     # Pro models have no free-tier quota; a thinking Flash model drafts and synthesizes.
     gemini_strong_model: str = "gemini-3.6-flash"
     # Tried in order when the preferred model is overloaded (503) or out of quota (429).
-    gemini_strong_fallbacks: list[str] = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.7-flash"]
-    gemini_fast_fallbacks: list[str] = ["gemini-flash-lite-latest", "gemini-3.1-flash-lite"]
+    # gemini-flash-latest is deliberately absent: in live runs the alias timed out (504) after ~3 minutes on every
+    # call while pinned models answered in seconds. The chain ends with a lite model so a draft always comes back.
+    gemini_strong_fallbacks: list[str] = ["gemini-3.5-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite"]
+    gemini_fast_fallbacks: list[str] = ["gemini-3.1-flash-lite"]
+    # Drafting and synthesis are structured extraction from supplied evidence; deep thinking only adds latency.
+    gemini_thinking_level: str = "low"
     gemini_embedding_model: str = "gemini-embedding-001"
     gemini_timeout_seconds: int = 180
     # Free tier: 100 embedding requests per minute, and every text in a batch counts as one request.

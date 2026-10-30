@@ -2,6 +2,7 @@ import { type FormEvent, useId, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useSubmitResearch } from "../api/client";
+import { useToast } from "./Toast";
 import { Button } from "./ui";
 
 const EXAMPLES = [
@@ -17,14 +18,17 @@ function newKey() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 }
 
-export function ResearchForm({ compact = false }: { compact?: boolean }) {
+export function ResearchForm({ compact = false, initialTicker, initialCompany }: {
+  compact?: boolean; initialTicker?: string; initialCompany?: string;
+}) {
   const ids = useId();
   const navigate = useNavigate();
+  const toast = useToast();
   const submit = useSubmitResearch();
   // One key per form instance: double-clicks and network retries can't start a second job (ADR 0003).
   const [idempotencyKey, setIdempotencyKey] = useState(newKey);
-  const [ticker, setTicker] = useState("");
-  const [company, setCompany] = useState("");
+  const [ticker, setTicker] = useState(initialTicker ?? "");
+  const [company, setCompany] = useState(initialCompany ?? "");
   const [query, setQuery] = useState("");
 
   function onSubmit(event: FormEvent) {
@@ -34,6 +38,7 @@ export function ResearchForm({ compact = false }: { compact?: boolean }) {
       {
         onSuccess: (job) => {
           setIdempotencyKey(newKey());
+          toast(`Research on ${job.ticker} queued`);
           navigate(`/research/${job.id}`);
         },
       },
@@ -52,17 +57,17 @@ export function ResearchForm({ compact = false }: { compact?: boolean }) {
       <div className="grid gap-2">
         <label htmlFor={`${ids}-ticker`} className="font-medium">Ticker</label>
         <input id={`${ids}-ticker`} className={`${field} num uppercase`} value={ticker} required maxLength={10}
-          autoComplete="off" spellCheck={false} placeholder="MSFT" onChange={(e) => edit(setTicker)(e.target.value)} />
+          name="ticker" autoComplete="off" spellCheck={false} translate="no" placeholder="e.g. MSFT…" onChange={(e) => edit(setTicker)(e.target.value)} />
       </div>
       <div className="grid gap-2">
         <label htmlFor={`${ids}-company`} className="font-medium">Company</label>
         <input id={`${ids}-company`} className={field} value={company} required maxLength={255}
-          placeholder="Microsoft Corporation" onChange={(e) => edit(setCompany)(e.target.value)} />
+          name="company" autoComplete="organization" placeholder="e.g. Microsoft Corporation…" onChange={(e) => edit(setCompany)(e.target.value)} />
       </div>
       <div className={`grid gap-2 ${compact ? "" : "md:col-span-2"}`}>
         <label htmlFor={`${ids}-query`} className="font-medium">Question</label>
         <textarea id={`${ids}-query`} className={`${field} h-auto min-h-[88px] py-2 leading-5`} value={query} required
-          maxLength={2000} placeholder="What do you want to know about this company?"
+          name="question" maxLength={2000} placeholder="e.g. How durable is the margin expansion, and what could reverse it?"
           onChange={(e) => edit(setQuery)(e.target.value)} />
       </div>
       <div className={`flex flex-wrap items-center gap-x-4 gap-y-3 ${compact ? "" : "md:col-span-2"}`}>
@@ -84,7 +89,7 @@ export function ResearchForm({ compact = false }: { compact?: boolean }) {
               <button key={example.ticker} type="button"
                 className="press h-8 rounded-full border border-control px-3 text-small text-soft hover:border-muted hover:text-ink"
                 onClick={() => { setTicker(example.ticker); setCompany(example.company); setQuery(example.query); }}>
-                <span className="num text-ink">{example.ticker}</span> · {example.query.split(",")[0]?.replace(/\?$/, "")}
+                <span className="num text-ink" translate="no">{example.ticker}</span> {example.query.split(",")[0]?.replace(/\?$/, "")}
               </button>
             ))}
           </div>

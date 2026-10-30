@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useRef } from "react";
 
 import type { Claim, Evidence, Metric } from "../api/client";
-import { CLAIM_TYPE_LABEL, FIELD_LABEL, SECTION_LABEL, date, metricValue, usd } from "../lib/format";
+import { CLAIM_TYPE_LABEL, FIELD_LABEL, SECTION_LABEL, date, metricDisplay, usd } from "../lib/format";
 import { CloseIcon, ExternalIcon } from "./icons";
 import { VerificationPill } from "./ui";
 
@@ -49,7 +49,7 @@ function EvidenceBlock({ evidence }: { evidence: Evidence }) {
     <figure className="border-t border-rule pt-4">
       <figcaption className="mb-2 flex flex-wrap items-baseline justify-between gap-2 text-small text-muted">
         <span>
-          <span className="text-ink">{evidence.document.form}</span> · {SOURCE_SECTION[evidence.section ?? ""] ?? evidence.section ?? "Filing"} · filed{" "}
+          <span className="text-ink">{evidence.document.form}</span>, {SOURCE_SECTION[evidence.section ?? ""] ?? evidence.section ?? "Filing"} · filed{" "}
           <span className="num">{date(evidence.document.filed)}</span>
         </span>
         <a href={evidence.document.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-soft hover:text-ink">
@@ -73,7 +73,7 @@ function MetricBlock({ metric, divided = true }: { metric: Metric; divided?: boo
     <div className={divided ? "border-t border-rule pt-4" : ""}>
       <div className="flex items-baseline justify-between gap-4">
         <span>{metric.label} <span className="num text-muted">{metric.period}</span></span>
-        <span className="num text-card">{metricValue(metric.value, metric.unit)}</span>
+        <span className="num text-card">{metricDisplay(metric.key, metric.value, metric.unit)}</span>
       </div>
       <p className="num mt-2 rounded-[6px] bg-raised px-3 py-2 text-small text-soft">{metric.formula}</p>
       <table className="mt-3 w-full text-small">
@@ -117,7 +117,7 @@ export function Inspector({ target, onClose }: { target: InspectTarget | null; o
           <header className="flex items-start justify-between gap-4 border-b border-rule px-6 py-4">
             <div>
               <p className="text-small text-muted">
-                {target.kind === "claim" ? <>Claim <span className="num">{target.number}</span> · {SECTION_LABEL[target.claim.section] ?? target.claim.section}</>
+                {target.kind === "claim" ? <>Claim <span className="num">{target.number}</span> in {SECTION_LABEL[target.claim.section] ?? target.claim.section}</>
                   : target.kind === "metric" ? "Calculation" : "Reported figure"}
               </p>
               <h2 id="inspector-title" className="text-card font-semibold">
@@ -154,7 +154,7 @@ export function Inspector({ target, onClose }: { target: InspectTarget | null; o
                   <dl className="divide-y divide-rule">
                     {[
                       ["XBRL concept", String(target.provenance.concept ?? "—")],
-                      ["Filing", `${target.provenance.form ?? ""} · ${target.provenance.accession ?? ""}`],
+                      ["Filing", `${target.provenance.form ?? ""}, accession ${target.provenance.accession ?? ""}`],
                       ["Filed", date(String(target.provenance.filed ?? ""))],
                       ["Period", `${date(String(target.provenance.period_start ?? "")) === "—" ? "" : `${date(String(target.provenance.period_start))} – `}${date(String(target.provenance.period_end ?? ""))}`],
                       ["Unit", String(target.provenance.unit ?? "USD")],
