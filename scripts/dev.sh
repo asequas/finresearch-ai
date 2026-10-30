@@ -14,7 +14,7 @@ if ! docker info >/dev/null 2>&1; then
   docker info >/dev/null 2>&1 || { echo "Docker didn't start within two minutes."; exit 1; }
 fi
 
-docker compose up -d >/dev/null
+docker compose up -d >/dev/null 2>&1
 printf "Waiting for PostgreSQL"
 for _ in $(seq 1 30); do
   [ "$(docker inspect -f '{{.State.Health.Status}}' finresearch-postgres 2>/dev/null)" = healthy ] && break
@@ -25,7 +25,7 @@ echo
 [ -d .venv ] || { echo "No .venv found. See README → Run it locally."; exit 1; }
 # shellcheck disable=SC1091
 source .venv/bin/activate
-alembic upgrade head >/dev/null
+alembic upgrade head >/dev/null 2>&1 || { echo "Migrations failed. Run: alembic upgrade head"; exit 1; }
 
 echo "Preflight:"
 python -m backend.core.preflight || echo "Research jobs will fail until the items marked FIX are resolved."

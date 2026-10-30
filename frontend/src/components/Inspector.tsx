@@ -32,7 +32,10 @@ function escape(text: string) {
 export function Highlighted({ context, quote }: { context: string; quote: string }) {
   const parts = quote.split(/\.\.\.|…/).map((p) => p.trim().replace(/^[\s.,;:]+|[\s.,;:]+$/g, "")).filter((p) => p.length > 3);
   if (!parts.length) return <>{context}</>;
-  const pattern = new RegExp(parts.map((p) => p.split(/\s+/).map(escape).join("\\s+").replace(/['’]/g, "['’]")).join("|"), "gi");
+  // Match like the verifier: whitespace- and quote-insensitive, and "$" optional (table cells split it off).
+  const words = (p: string) => p.replace(/\$\s*/g, "").split(/\s+/).filter(Boolean)
+    .map((w) => (/^[\d(]/.test(w) ? "\\$?\\s*" : "") + escape(w).replace(/['’]/g, "['’]"));
+  const pattern = new RegExp(parts.map((p) => words(p).join("\\s+")).join("|"), "gi");
   const nodes: ReactNode[] = [];
   let last = 0;
   for (const match of context.matchAll(pattern)) {
@@ -45,18 +48,24 @@ export function Highlighted({ context, quote }: { context: string; quote: string
 }
 
 function EvidenceBlock({ evidence }: { evidence: Evidence }) {
+  const passage = useRef<HTMLQuoteElement>(null);
+  // Bring the highlighted words into view; the quote is often deep inside a long passage.
+  useEffect(() => {
+    const mark = passage.current?.querySelector("mark");
+    if (mark && passage.current) passage.current.scrollTop = Math.max(0, (mark as HTMLElement).offsetTop - 48);
+  }, [evidence.id]);
   return (
     <figure className="border-t border-rule pt-4">
       <figcaption className="mb-2 flex flex-wrap items-baseline justify-between gap-2 text-small text-muted">
         <span>
-          <span className="text-ink">{evidence.document.form}</span>, {SOURCE_SECTION[evidence.section ?? ""] ?? evidence.section ?? "Filing"} · filed{" "}
+          <span className="text-ink">{evidence.document.form}</span>, {SOURCE_SECTION[evidence.section ?? ""] ?? evidence.section ?? "Filing"}, filed{" "}
           <span className="num">{date(evidence.document.filed)}</span>
         </span>
         <a href={evidence.document.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-soft hover:text-ink">
           Open on SEC.gov <ExternalIcon />
         </a>
       </figcaption>
-      <blockquote className="max-h-72 overflow-y-auto rounded-[6px] bg-raised p-4 text-read whitespace-pre-line text-soft">
+      <blockquote ref={passage} className="relative max-h-72 overflow-y-auto rounded-[6px] bg-raised p-4 text-read whitespace-pre-line text-soft">
         {evidence.context ? <Highlighted context={evidence.context} quote={evidence.quote} /> : evidence.quote}
       </blockquote>
       <p className={`mt-2 text-small ${evidence.quote_verified ? "text-muted" : "text-[var(--pill-negative-ink)]"}`}>
