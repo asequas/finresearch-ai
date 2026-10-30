@@ -47,6 +47,7 @@ class ResearchJobResponse(BaseModel):
     error_message: str | None
     cancel_requested: bool
     lease_expires_at: datetime | None
+    run_after: datetime
     created_at: datetime
     updated_at: datetime
     started_at: datetime | None

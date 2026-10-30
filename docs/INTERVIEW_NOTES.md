@@ -86,3 +86,15 @@ Write your answer, then compare it with [ADR 0001](adr/0001-postgres-backed-job-
   minutes-long jobs; push would matter for many concurrent viewers or sub-second updates.
 - **Designed states**: loading bars at the real size (no layout shift), empty frames with one sentence, errors inside
   the failing block with Retry, partial results (failed stages, skipped metrics, unsupported claims) shown, not hidden.
+
+## Retrieval and reranking (ADR 0007)
+
+- **Measure before optimising.** A 30-question gold set showed the "hybrid" search was worse than vector-only:
+  the keyword side matched the company's own name in every chunk. Dropping it and halving the keyword weight fixed
+  hybrid; the eval made that visible (`python -m backend.evals.retrieval`).
+- **Bi-encoder vs cross-encoder.** Cheap first stage for recall (embeddings + full-text, RRF), expensive cross-encoder
+  for precision on the top 20 only.
+- **Model/data mismatch.** An MS MARCO cross-encoder on 2,200-character chunks made results worse until each chunk
+  was scored by its best 450-character window.
+- **Fuse, don't replace.** Replacing the ranking raised R@1 but lost recall; RRF over both rankings kept both.
+- **Labels that survive re-indexing.** Relevance = the chunk contains a verified answer phrase, not a chunk id.
