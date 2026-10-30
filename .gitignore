@@ -33,3 +33,5 @@ dist/
 # Local data and tooling output
 .cache/
 .taste-skill/
+.claude/
+skills-lock.json

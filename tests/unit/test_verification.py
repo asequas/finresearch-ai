@@ -42,3 +42,40 @@ def test_unmatched_numbers_tolerates_rounding():
 
     assert unmatched_numbers("Operating margin reached 44.6% with $72.3B of free cash flow.", metrics) == []
     assert unmatched_numbers("Operating margin reached 48.0%.", metrics) == ["48.0%"]
+
+
+CHUNK = """Microsoft Cloud revenue increased 27% to $214.4 billion, driven by Azure and other cloud services.
+Server products and cloud services revenue increased 32%. Gaming revenue decreased 4%."""
+
+
+def test_snap_quote_recovers_the_filings_exact_wording():
+    from backend.analysis.verification import snap_quote
+
+    paraphrase = "Microsoft Cloud revenue grew 27% to $214.4 billion, driven by Azure and other cloud services."
+    assert snap_quote(paraphrase, CHUNK) == "Microsoft Cloud revenue increased 27% to $214.4 billion, driven by Azure and other cloud services."
+
+
+def test_snap_quote_refuses_loose_matches():
+    from backend.analysis.verification import snap_quote
+
+    assert snap_quote("Microsoft's cloud business is the main driver of its future margin expansion.", CHUNK) is None
+    assert snap_quote("Gaming revenue increased 40% this year overall", CHUNK) is None
+    assert snap_quote("Item 1A. Risk Factors", CHUNK) is None
+
+
+TABLE = """Segment results
+North America 9,872 10,483 AWS 11,434 17,773 33,141 48,555
+Consolidated 68,593 79,975"""
+
+
+@pytest.mark.parametrize(
+    "quote, expected",
+    [
+        ("AWS 11,434 17,773 33,141 48,555", True),  # a data row is evidence even though it's short
+        ("Consolidated $ 68,593 $ 79,975", True),  # currency symbols split into their own cells
+        ("AWS 11,434 99,999", False),  # figures that aren't in the filing
+        ("Segment results", False),  # a label without figures
+    ],
+)
+def test_table_rows_count_as_evidence(quote, expected):
+    assert quote_in_source(quote, TABLE) is expected

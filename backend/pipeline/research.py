@@ -20,7 +20,7 @@ from backend.analysis.chunking import chunk_text
 from backend.analysis.metrics import FinancialPeriod, compute_metrics, describe_metric, format_metric
 from backend.analysis.rerank import Reranker, get_reranker
 from backend.analysis.retrieval import RetrievedChunk, retrieve
-from backend.analysis.verification import quote_in_source, unmatched_numbers
+from backend.analysis.verification import quote_in_source, snap_quote, unmatched_numbers
 from backend.core.config import settings
 from backend.llm.client import LLMClient, get_llm_client
 from backend.models.calculated_metric import CalculatedMetric
@@ -483,12 +483,19 @@ class Verify:
             ).all()
 
         quote_ok: dict[UUID, bool] = {}
+        snapped: dict[UUID, str] = {}
         quotes_by_claim: dict[UUID, list[str]] = {}
         for claim_id, evidence, chunk_content in evidence_rows:
-            ok = bool(chunk_content) and quote_in_source(evidence.excerpt, chunk_content)
+            excerpt = evidence.excerpt
+            ok = bool(chunk_content) and quote_in_source(excerpt, chunk_content)
+            if not ok and chunk_content:
+                exact = snap_quote(excerpt, chunk_content)
+                if exact is not None:
+                    snapped[evidence.id] = exact
+                    excerpt, ok = exact, True
             quote_ok[evidence.id] = ok
             if ok:
-                quotes_by_claim.setdefault(claim_id, []).append(evidence.excerpt)
+                quotes_by_claim.setdefault(claim_id, []).append(excerpt)
 
         decided: dict[UUID, tuple[str, str]] = {}
         to_judge: list[Claim] = []
@@ -535,7 +542,10 @@ class Verify:
 
         with ctx.transaction() as session:
             for evidence_id, ok in quote_ok.items():
-                session.execute(update(Evidence).where(Evidence.id == evidence_id).values(quote_verified=ok))
+                values = {"quote_verified": ok}
+                if evidence_id in snapped:
+                    values["excerpt"] = snapped[evidence_id]  # show the filing's exact words, not the paraphrase
+                session.execute(update(Evidence).where(Evidence.id == evidence_id).values(**values))
             for claim_id, (status, note) in decided.items():
                 session.execute(
                     update(Claim).where(Claim.id == claim_id).values(verification_status=status, verification_note=note)
@@ -543,7 +553,7 @@ class Verify:
         counts: dict[str, int] = {}
         for status, _ in decided.values():
             counts[status] = counts.get(status, 0) + 1
-        ctx.usage.metadata = {"verdicts": counts, "quotes_checked": len(quote_ok)}
+        ctx.usage.metadata = {"verdicts": counts, "quotes_checked": len(quote_ok), "quotes_snapped": len(snapped)}
 
 
 # ---- 8. Synthesize ---------------------------------------------------------
