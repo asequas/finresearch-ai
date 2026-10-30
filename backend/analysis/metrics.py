@@ -307,6 +307,13 @@ def format_metric(value: Decimal, unit: str) -> str:
     return str(value)
 
 
+def describe_metric(key: str, value: Decimal, unit: str) -> str:
+    """Reader-facing value: negative net debt is net cash, said in words rather than a minus sign."""
+    if key == "net_debt" and value < 0:
+        return f"net cash of {format_usd(-value)}"
+    return format_metric(value, unit)
+
+
 def format_usd(value: Decimal) -> str:
     sign = "-" if value < 0 else ""
     magnitude = abs(value)

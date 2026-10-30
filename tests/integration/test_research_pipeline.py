@@ -98,7 +98,13 @@ class FakeLLM:
         if schema is prompts.ResearchPlan:
             value = schema(sub_questions=["What are the main risks?", "How is profitability trending?"])
         elif schema is prompts.ClaimDraft:
-            excerpts = dict(re.findall(r"\[(E\d+)\] \([^)]*\)\n([^\n]+)", prompt))
+            # Quote a substantive sentence, as the prompt asks; headings aren't evidence.
+            blocks = re.findall(r"\[(E\d+)\] \([^)]*\)\n(.*?)(?=\n\n\[E|\Z)", prompt, re.S)
+            excerpts = {
+                eid: next(line for line in text.splitlines() if len(line.split()) >= 6 and not line.lower().startswith("item"))
+                for eid, text in blocks
+                if any(len(line.split()) >= 6 and not line.lower().startswith("item") for line in text.splitlines())
+            }
             metrics = dict(re.findall(r"(M\d+): Operating margin FY2024 = ([\d.]+%)", prompt))
             first_id, first_text = next(iter(excerpts.items()))
             metric_id, shown = next(iter(metrics.items()))

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from backend.pipeline.research import _resolve_basis
 
 CLAIMS = {"C1": SimpleNamespace(id="claim-a", position=0), "C5": SimpleNamespace(id="claim-b", position=7)}
-METRICS = {"M3": SimpleNamespace(label="Operating margin", period="FY2026", value=Decimal("0.468"), unit="ratio")}
+METRICS = {"M3": SimpleNamespace(metric_key="operating_margin", label="Operating margin", period="FY2026", value=Decimal("0.468"), unit="ratio")}
 
 
 def test_scenario_basis_handles_become_readable_references():

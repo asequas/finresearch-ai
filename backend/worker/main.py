@@ -16,6 +16,7 @@ from backend.pipeline.base import (
     JobContext,
     LeaseLost,
     PermanentError,
+    ProviderBusyError,
     ShutdownRequested,
     Stage,
 )
@@ -75,6 +76,7 @@ class Worker:
         lease_seconds: float = settings.worker_lease_seconds,
         poll_interval: float = settings.worker_poll_interval_seconds,
         retry_base_seconds: float = settings.job_retry_base_seconds,
+        busy_retry_base_seconds: float = settings.job_busy_retry_base_seconds,
     ):
         self.stages_factory = stages_factory
         self.session_factory = session_factory
@@ -82,6 +84,7 @@ class Worker:
         self.lease_seconds = lease_seconds
         self.poll_interval = poll_interval
         self.retry_base_seconds = retry_base_seconds
+        self.busy_retry_base_seconds = busy_retry_base_seconds
         self.shutdown_event = threading.Event()
 
     def run_forever(self) -> None:
@@ -143,7 +146,11 @@ class Worker:
         except Exception as exc:
             message = describe_error(exc)
             if job.attempts < job.max_attempts:
-                delay = backoff_seconds(job.attempts, self.retry_base_seconds)
+                delay = (
+                    min(backoff_seconds(job.attempts, self.busy_retry_base_seconds), 600)
+                    if isinstance(exc, ProviderBusyError)
+                    else backoff_seconds(job.attempts, self.retry_base_seconds)
+                )
                 self.queue.schedule_retry(
                     job.id, ctx.lease_token, error_message=message, delay_seconds=delay
                 )
