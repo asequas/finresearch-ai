@@ -9,6 +9,7 @@ alembic==1.19.1
 pgvector==0.5.0
 httpx==0.28.1
 google-genai==2.19.0
+fastembed==0.9.1  # local cross-encoder reranker on ONNX Runtime (ADR 0007)
 
 # Tests
 pytest==9.1.1

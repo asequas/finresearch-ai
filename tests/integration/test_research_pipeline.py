@@ -282,3 +282,26 @@ def test_evaluation_metrics_and_label_scoring(run_job):
     assert score.citation_correctness == 0.5
     assert score.meets_target is False
     assert score.system_supported_precision == 1.0
+
+
+def test_company_workspace_endpoint(run_job):
+    job = run_job()
+    from backend.services.user import UserService
+    with SessionLocal() as session:
+        user = UserService().get_or_create_dev_user(session)
+        session.get(ResearchJob, job.id).user_id = user.id
+        session.commit()
+    client = TestClient(app)
+
+    body = client.get("/api/v1/companies/wdgt").json()
+
+    assert body["company"]["ticker"] == "WDGT"
+    assert body["latest_report_job_id"] == str(job.id)
+    assert [f["period"] for f in body["financials"]] == ["FY2022", "FY2023", "FY2024"]
+    assert any(m["key"] == "operating_margin" for m in body["metrics"])
+    assert body["jobs"][0]["has_report"] is True
+    assert client.get("/api/v1/companies/NOPE").status_code == 404
+
+    meta = client.get("/api/v1/meta").json()
+    assert {t["stage"] for t in meta["stage_timings"]} >= {"resolving_company", "synthesizing"}
+    assert meta["reranker"] == "none"

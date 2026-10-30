@@ -5,6 +5,7 @@ retried or resumed stage never duplicates data.
 import hashlib
 import logging
 import re
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -17,7 +18,8 @@ from sqlalchemy.orm import Session
 
 from backend.analysis.chunking import chunk_text
 from backend.analysis.metrics import FinancialPeriod, compute_metrics, describe_metric, format_metric
-from backend.analysis.retrieval import RetrievedChunk, hybrid_search
+from backend.analysis.rerank import Reranker, get_reranker
+from backend.analysis.retrieval import RetrievedChunk, retrieve
 from backend.analysis.verification import quote_in_source, unmatched_numbers
 from backend.core.config import settings
 from backend.llm.client import LLMClient, get_llm_client
@@ -42,7 +44,9 @@ from backend.sources.xbrl import UnsupportedFinancialsError, extract_annual_peri
 logger = logging.getLogger(__name__)
 
 SNAPSHOT_FIELDS = MONEY_FIELDS + ("eps", "diluted_shares")
-MAX_EXCERPTS = 28
+# Big enough to cover every sub-question, small enough that a busy model answers before its deadline.
+MAX_EXCERPTS = 16
+PER_QUESTION = 4
 DISCLAIMER = (
     "Generated from SEC filings for research and education. Not investment advice. "
     "Verify material facts against the linked filings before acting."
@@ -53,8 +57,13 @@ DISCLAIMER = (
 class Services:
     sec_factory: Callable[[], SecClient]
     llm_factory: Callable[[], LLMClient]
+    reranker_factory: Callable[[], Reranker] = get_reranker
     _sec: SecClient | None = field(default=None, init=False)
     _llm: LLMClient | None = field(default=None, init=False)
+
+    @property
+    def reranker(self) -> Reranker:
+        return self.reranker_factory()
 
     @property
     def sec(self) -> SecClient:
@@ -368,14 +377,29 @@ class Analyze:
         _record(ctx, plan)
         questions = [ctx.query, *plan.value.sub_questions[:6]]
 
-        chunks: dict[UUID, RetrievedChunk] = {}
         query_embeddings = llm.embed(questions, task="query")
+        reranker = self.services.reranker
+        exclude = [ctx.company, ctx.ticker]
+        per_question: list[list[RetrievedChunk]] = []
+        retrieval_log = []
         with _read(ctx) as session:
             for question, embedding in zip(questions, query_embeddings):
-                for hit in hybrid_search(session, query_text=question, query_embedding=embedding, document_ids=document_ids, limit=6):
-                    chunks.setdefault(hit.id, hit)
-        ctx.checkpoint()
-        excerpts = list(chunks.values())[:MAX_EXCERPTS]
+                started = time.perf_counter()
+                hits = retrieve(
+                    session, query_text=question, query_embedding=embedding, document_ids=document_ids,
+                    reranker=reranker, limit=PER_QUESTION, rerank_candidates=settings.rerank_candidates,
+                    exclude_terms=exclude,
+                )
+                per_question.append(hits)
+                retrieval_log.append({"question": question, "hits": len(hits), "ms": round((time.perf_counter() - started) * 1000)})
+                ctx.checkpoint()
+        # Round-robin: every sub-question gets its best passage before any gets its second.
+        chunks: dict[UUID, RetrievedChunk] = {}
+        for rank in range(PER_QUESTION):
+            for hits in per_question:
+                if rank < len(hits) and len(chunks) < MAX_EXCERPTS:
+                    chunks.setdefault(hits[rank].id, hits[rank])
+        excerpts = list(chunks.values())
         excerpt_ids = {f"E{i}": chunk for i, chunk in enumerate(excerpts, start=1)}
         excerpt_text = "\n\n".join(f"[{eid}] ({chunk.section})\n{chunk.content}" for eid, chunk in excerpt_ids.items())
 
@@ -413,8 +437,15 @@ class Analyze:
                     )
                     session.add(evidence)
                     session.flush()
-                    session.add(ClaimEvidence(claim_id=claim.id, evidence_id=evidence.id, relevance_score=None))
-        ctx.usage.metadata = {"questions": questions, "excerpts": len(excerpts), "claims": len(draft.value.claims)}
+                    relevance = chunk.rerank_score if chunk.rerank_score is not None else None
+                    session.add(ClaimEvidence(
+                        claim_id=claim.id, evidence_id=evidence.id,
+                        relevance_score=Decimal(str(round(relevance, 4))) if relevance is not None else None,
+                    ))
+        ctx.usage.metadata = {
+            "questions": questions, "excerpts": len(excerpts), "claims": len(draft.value.claims),
+            "reranker": reranker.name, "retrieval": retrieval_log,
+        }
 
 
 def _delete_claims(session: Session, job_id: UUID) -> None:

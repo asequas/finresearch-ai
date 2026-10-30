@@ -19,6 +19,8 @@ if not make_url(TEST_DATABASE_URL).database.endswith("_test"):
     )
 
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+# Tests never download models; the cross-encoder has its own opt-in test (pytest -m model).
+os.environ.setdefault("RERANKER", "none")
 
 import pytest  # noqa: E402
 from alembic import command  # noqa: E402

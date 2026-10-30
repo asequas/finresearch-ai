@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     gemini_timeout_seconds: int = 180
     # Free tier: 100 embedding requests per minute, and every text in a batch counts as one request.
     gemini_embed_per_minute: int = 90
+    # Second-stage retrieval (ADR 0007): "minilm", "jina-turbo" or "none".
+    reranker: str = "minilm"
+    rerank_candidates: int = 20
     sec_user_agent: str | None = None
     data_cache_dir: str = ".cache/finresearch"
 

@@ -16,7 +16,7 @@ from backend.schemas.research import (
     ResearchJobListResponse,
     ResearchJobResponse,
 )
-from backend.schemas.report import CompanySummary, ReportResponse
+from backend.schemas.report import CompanyDetail, CompanySummary, ReportResponse
 from backend.services.report import ReportService
 from backend.services.research_job import ResearchJobService
 
@@ -139,3 +139,16 @@ def list_companies(
     current_user: User = Depends(get_current_user),
 ):
     return ReportService().list_companies(db, user_id=current_user.id)
+
+
+@companies_router.get(
+    "/{ticker}",
+    response_model=CompanyDetail,
+    responses={404: {"description": "No research on this company yet"}},
+)
+def get_company(
+    ticker: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return ReportService().get_company(db, ticker=ticker, user_id=current_user.id)

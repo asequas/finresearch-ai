@@ -22,6 +22,7 @@ from backend.models.financial_snapshot import MONEY_FIELDS
 from backend.models.research_job import ResearchJobStatus
 from backend.schemas.report import (
     ClaimOut,
+    CompanyDetail,
     CompanyOut,
     CompanySummary,
     EvidenceOut,
@@ -58,6 +59,20 @@ def _metric_out(metric: CalculatedMetric) -> MetricOut:
         value=metric.value, unit=metric.unit, formula=metric.formula, inputs=metric.inputs,
         calculation_version=metric.calculation_version,
     )
+
+
+def _financials_out(snapshots: list[FinancialSnapshot]) -> list[FinancialPeriodOut]:
+    return [
+        FinancialPeriodOut(
+            period=s.period, fiscal_year=s.fiscal_year, period_end_date=s.period_end_date, currency=s.currency,
+            source=s.source, retrieved_at=s.retrieved_at,
+            values={
+                name: FinancialValue(value=getattr(s, name), provenance=(s.provenance or {}).get(name))
+                for name in SNAPSHOT_FIELDS
+            },
+        )
+        for s in snapshots
+    ]
 
 
 class ReportService:
@@ -133,17 +148,7 @@ class ReportService:
                 .order_by(FinancialSnapshot.period_end_date)
             )
         )
-        financials = [
-            FinancialPeriodOut(
-                period=s.period, fiscal_year=s.fiscal_year, period_end_date=s.period_end_date, currency=s.currency,
-                source=s.source, retrieved_at=s.retrieved_at,
-                values={
-                    name: FinancialValue(value=getattr(s, name), provenance=(s.provenance or {}).get(name))
-                    for name in SNAPSHOT_FIELDS
-                },
-            )
-            for s in snapshots
-        ]
+        financials = _financials_out(snapshots)
 
         full = report.full_report or {}
         job_out = ResearchJobResponse.model_validate(job)
@@ -199,3 +204,53 @@ class ReportService:
                 if summary.latest_report_job_id is None and job.id in with_reports:
                     summary.latest_report_job_id = job.id
         return list(summaries.values())
+
+    def get_company(self, session: Session, *, ticker: str, user_id: UUID) -> CompanyDetail:
+        """A company workspace: the latest report's figures plus every job this user ran on it."""
+        jobs = list(
+            session.scalars(
+                select(ResearchJob)
+                .join(Company, Company.id == ResearchJob.company_id)
+                .where(ResearchJob.user_id == user_id, Company.ticker == ticker.upper())
+                .order_by(ResearchJob.created_at.desc())
+            )
+        )
+        if not jobs:
+            raise NotFoundError(f"No research on {ticker.upper()} yet")
+        company = session.get(Company, jobs[0].company_id)
+        report_job_ids = set(
+            session.scalars(select(Report.research_job_id).where(Report.research_job_id.in_([j.id for j in jobs])))
+        )
+        latest = next((j for j in jobs if j.id in report_job_ids), None)
+        snapshots: list[FinancialSnapshot] = []
+        metrics: list[CalculatedMetric] = []
+        data_as_of = None
+        if latest is not None:
+            snapshots = list(
+                session.scalars(
+                    select(FinancialSnapshot)
+                    .where(FinancialSnapshot.research_job_id == latest.id)
+                    .order_by(FinancialSnapshot.period_end_date)
+                )
+            )
+            metrics = list(
+                session.scalars(
+                    select(CalculatedMetric)
+                    .where(CalculatedMetric.research_job_id == latest.id)
+                    .order_by(CalculatedMetric.metric_key, CalculatedMetric.period)
+                )
+            )
+            data_as_of = snapshots[-1].period_end_date if snapshots else None
+        job_out = []
+        for job in jobs:
+            item = ResearchJobResponse.model_validate(job)
+            item.has_report = job.id in report_job_ids
+            job_out.append(item)
+        return CompanyDetail(
+            company=_company_out(company),
+            latest_report_job_id=latest.id if latest else None,
+            data_as_of=data_as_of,
+            financials=_financials_out(snapshots),
+            metrics=[_metric_out(m) for m in metrics],
+            jobs=job_out,
+        )
