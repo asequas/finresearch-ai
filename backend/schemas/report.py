@@ -136,6 +136,7 @@ class ReportResponse(BaseModel):
 
 class CompanySummary(BaseModel):
     company: CompanyOut
+    display_name: str  # the name the user typed most recently, e.g. "Costco Wholesale Corporation"
     job_count: int
     latest_job_id: uuid.UUID
     latest_job_status: str

@@ -6,8 +6,10 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 
 import { Shell } from "./components/Shell";
+import { ToastProvider } from "./components/Toast";
 import { Bar } from "./components/ui";
 import { Companies } from "./pages/Companies";
+import { CompanyPage } from "./pages/Company";
 import { JobPage } from "./pages/Job";
 import { NotFound } from "./pages/NotFound";
 import { Overview } from "./pages/Overview";
@@ -25,6 +27,7 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <ToastProvider>
         <Shell>
           <Suspense fallback={<Bar w="40%" h={28} />}>
             <Routes>
@@ -34,11 +37,13 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/reports" element={<Reports />} />
               <Route path="/reports/:jobId" element={<ReportPage />} />
               <Route path="/companies" element={<Companies />} />
+              <Route path="/companies/:ticker" element={<CompanyPage />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
         </Shell>
+        </ToastProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,

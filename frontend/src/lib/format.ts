@@ -23,6 +23,16 @@ export function usd(value: string | number | null | undefined, opts: { compact?:
   return `${sign}$${abs.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: abs < 100 ? 2 : 0 })}`;
 }
 
+/** Axis ticks: "$300B", "$1.5T", "$25M"; no trailing decimals. */
+export function usdTick(value: number): string {
+  const sign = value < 0 ? "-" : "";
+  const abs = Math.abs(value);
+  for (const [threshold, suffix] of [[1e12, "T"], [1e9, "B"], [1e6, "M"]] as const) {
+    if (abs >= threshold) return `${sign}$${Number((abs / threshold).toFixed(1))}${suffix}`;
+  }
+  return `${sign}$${Number(abs.toFixed(0)).toLocaleString("en-US")}`;
+}
+
 export function pct(value: string | number | null | undefined, opts: { sign?: boolean; digits?: number } = {}): string {
   const n = toNumber(value);
   if (n === null) return DASH;
@@ -33,6 +43,23 @@ export function pct(value: string | number | null | undefined, opts: { sign?: bo
 export function times(value: string | number | null | undefined): string {
   const n = toNumber(value);
   return n === null ? DASH : `${n.toFixed(2)}x`;
+}
+
+/** Reader-facing metric value; negative net debt reads as net cash, never as "-$2.1B of debt". */
+export function metricDisplay(key: string, value: string, unit: string, opts: { sign?: boolean } = {}): string {
+  const n = toNumber(value);
+  if (key === "net_debt" && n !== null && n < 0) return `Net cash ${usd(-n)}`;
+  return metricValue(value, unit, opts);
+}
+
+export function changeText(now: number, before: number, kind: "pct" | "pp"): string {
+  if (kind === "pp") {
+    const diff = (now - before) * 100;
+    return `${diff > 0 ? "+" : ""}${diff.toFixed(1)} pts`;
+  }
+  if (before === 0) return "—";
+  const change = (now - before) / Math.abs(before);
+  return `${change > 0 ? "+" : ""}${(change * 100).toFixed(1)}%`;
 }
 
 export function metricValue(value: string, unit: string, opts: { sign?: boolean } = {}): string {

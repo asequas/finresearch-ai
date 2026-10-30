@@ -194,7 +194,8 @@ class ReportService:
             summary = summaries.get(job.company_id)
             if summary is None:
                 summaries[job.company_id] = CompanySummary(
-                    company=_company_out(companies[job.company_id]), job_count=1, latest_job_id=job.id,
+                    company=_company_out(companies[job.company_id]), display_name=job.company,
+                    job_count=1, latest_job_id=job.id,
                     latest_job_status=job.status.value,
                     latest_report_job_id=job.id if job.id in with_reports else None,
                     latest_activity_at=job.updated_at,

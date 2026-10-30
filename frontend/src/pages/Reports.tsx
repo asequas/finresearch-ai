@@ -3,9 +3,11 @@ import { Link } from "react-router-dom";
 import { useJobs } from "../api/client";
 import { Bar, Button, ButtonLink, Empty, ErrorBlock, PageTitle, Panel } from "../components/ui";
 import { date, relative } from "../lib/format";
+import { useTitle } from "../lib/useTitle";
 
 export function Reports() {
   const jobs = useJobs({ status: "completed" });
+  useTitle("Reports");
   const rows = (jobs.data?.pages.flatMap((p) => p.items) ?? []).filter((j) => j.has_report);
 
   return (
@@ -31,7 +33,7 @@ export function Reports() {
                 {rows.map((job) => (
                   <tr key={job.id} className="border-t border-rule hover:bg-raised">
                     <td className="num px-6 py-3 align-top font-medium">
-                      <Link to={`/reports/${job.id}`} className="hover:underline">{job.ticker}</Link>
+                      <Link to={`/reports/${job.id}`} className="hover:underline" translate="no">{job.ticker}</Link>
                     </td>
                     <td className="py-3 align-top">
                       <Link to={`/reports/${job.id}`} className="block">
