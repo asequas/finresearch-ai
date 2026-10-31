@@ -56,7 +56,7 @@ def test_pipeline_produces_verified_report(run_job):
         report = session.scalar(select(Report).where(Report.research_job_id == job.id))
         assert report.full_report["headline"].startswith("Widgetco")
         assert report.data_as_of.isoformat() == "2024-09-30"
-        assert any("price data" in limitation for limitation in report.limitations)
+        assert any("doesn't compare its fair value with the share price" in limitation for limitation in report.limitations)
         assert len(report.full_report["key_points"][0]["claim_ids"]) == 2
 
 
