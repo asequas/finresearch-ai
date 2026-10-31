@@ -159,3 +159,39 @@ def test_trace_endpoint_shows_plan_researchers_and_critic(make_job, tmp_path):
     assert trace["totals"]["researchers"] == 3 and trace["totals"]["tool_calls"] == 3
     assert report["research"]["revisions"] == 1
     assert client.get(f"/api/v1/research/{uuid4()}/trace").status_code == 404
+
+
+def test_a_revision_that_verifies_worse_is_undone(make_job, tmp_path):
+    """Seen live: rate limits pushed the redraft onto a weak fallback model that dropped every quote."""
+    from backend.pipeline import prompts
+
+    class WorseSecondDraft(FakeLLM):
+        drafts = 0
+
+        def generate_json(self, *, prompt, schema, system, strong=False, temperature=0.2):
+            result = super().generate_json(prompt=prompt, schema=schema, system=system, strong=strong, temperature=temperature)
+            if schema is prompts.ClaimDraft:
+                WorseSecondDraft.drafts += 1
+                if WorseSecondDraft.drafts == 2:
+                    for claim in result.value.claims:
+                        claim.evidence, claim.metric_refs = [], []
+            return result
+
+    job = make_job(ticker="WDGT")
+    services = Services(sec_factory=lambda: FakeSec(tmp_path), llm_factory=WorseSecondDraft,
+                        agent_model_factory=scripted_agent_model(ScriptedResearcher()))
+    Worker(stages_factory=lambda: research_stages(services), retry_base_seconds=0).run_once()
+
+    with SessionLocal() as session:
+        assert session.get(ResearchJob, job.id).status == ResearchJobStatus.COMPLETED
+        claims = {c.claim_text: c.verification_status for c in session.scalars(select(Claim).where(Claim.research_job_id == job.id))}
+        report = session.scalar(select(Report).where(Report.research_job_id == job.id))
+    critic = [r.extra_metadata for r in _runs(job.id, "critic")]
+    assert [c["decision"] for c in critic] == ["revise", "restore", "finish"]
+    assert "verified worse" in critic[1]["reason"]
+    assert _runs(job.id, "restore")[0].extra_metadata["restored_from"] == 0
+    # The first draft's verdicts are back, evidence and all.
+    assert claims["Widgetco sells widgets globally."] == "supported"
+    assert claims["Operating margin was 25.0% in FY2024."] == "supported"
+    assert report.full_report["research"]["restored_from"] == 0
+    assert [r["restored"] for r in report.full_report["research"]["verify_rounds"]] == [False, False, True]
