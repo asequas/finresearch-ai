@@ -188,10 +188,43 @@ def test_a_revision_that_verifies_worse_is_undone(make_job, tmp_path):
         report = session.scalar(select(Report).where(Report.research_job_id == job.id))
     critic = [r.extra_metadata for r in _runs(job.id, "critic")]
     assert [c["decision"] for c in critic] == ["revise", "restore", "finish"]
-    assert "verified worse" in critic[1]["reason"]
+    assert "is restored" in critic[1]["reason"]
     assert _runs(job.id, "restore")[0].extra_metadata["restored_from"] == 0
     # The first draft's verdicts are back, evidence and all.
     assert claims["Widgetco sells widgets globally."] == "supported"
     assert claims["Operating margin was 25.0% in FY2024."] == "supported"
     assert report.full_report["research"]["restored_from"] == 0
     assert [r["restored"] for r in report.full_report["research"]["verify_rounds"]] == [False, False, True]
+
+
+def test_a_researcher_that_never_uses_a_tool_contributes_nothing(make_job, tmp_path):
+    """Seen live: on a retry, a model answered from memory and cited seven handles it had never been shown."""
+
+    class Lazy(ScriptedResearcher):
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            from langchain_core.messages import AIMessage
+            from langchain_core.outputs import ChatGeneration, ChatResult
+
+            message = AIMessage(content="", tool_calls=[{"name": "Findings", "id": "call_lazy", "type": "tool_call", "args": {
+                "answer": "From memory.", "notes": [{"text": "Something plausible.", "passages": ["P:0cbb01f9"], "metrics": []}],
+                "gaps": [],
+            }}])
+            return ChatResult(generations=[ChatGeneration(message=message)])
+
+    job = make_job(ticker="WDGT")
+    _worker(tmp_path, Lazy()).run_once()
+
+    researchers = [r.extra_metadata for r in _runs(job.id, "researching")]
+    assert researchers and all(r["notes"] == 0 and r["dropped_handles"] == ["P:0cbb01f9"] for r in researchers)
+    assert all("without consulting the filings" in r["gaps"][0] for r in researchers)
+    # With no researcher evidence the draft falls back to one plain retrieval, so a report is still written.
+    with SessionLocal() as session:
+        assert session.get(ResearchJob, job.id).status == ResearchJobStatus.COMPLETED
+
+
+def test_a_failed_researcher_still_records_its_task(make_job, tmp_path):
+    job = make_job(ticker="WDGT")
+    _worker(tmp_path, ScriptedResearcher(fail_once="How is profitability trending?")).run_once()
+
+    failed = [r for r in _runs(job.id, "researching") if r.status == "failed"]
+    assert failed and failed[0].extra_metadata["question"] == "How is profitability trending?"
