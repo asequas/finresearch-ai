@@ -35,3 +35,6 @@ dist/
 .taste-skill/
 .claude/
 skills-lock.json
+
+# browser-automation snapshots
+.playwright-cli/
