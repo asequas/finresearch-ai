@@ -11,6 +11,9 @@ from typing import Generic, Protocol, TypeVar
 from pydantic import BaseModel, ValidationError
 
 from backend.core.config import settings
+from backend.costs.budget import ensure_budget
+from backend.costs.ledger import record_call
+from backend.llm.pacing import COOLDOWN, DEFAULT_COOLDOWN_SECONDS, OVERLOAD_COOLDOWN_SECONDS, PACER
 from backend.models.document_chunk import EMBEDDING_DIMENSION
 from backend.pipeline.base import PermanentError, ProviderBusyError, RetryableError
 
@@ -143,6 +146,7 @@ class GeminiClient:
         for _ in range(2):  # one repair attempt for malformed output
             model, response = self._generate_with_fallback(strong, prompt, config)
             usage = response.usage_metadata
+            _record_generation(model, usage)  # billed whether or not the output parses
             try:
                 value = schema.model_validate_json(response.text or "")
             except ValidationError as exc:
@@ -164,9 +168,13 @@ class GeminiClient:
         """
         from google.genai import errors, types
 
+        ensure_budget()
         preferred = self.strong_model if strong else self.fast_model
-        chain = [preferred, *[m for m in (self.strong_fallbacks if strong else self.fast_fallbacks) if m != preferred]]
+        full_chain = [preferred, *[m for m in (self.strong_fallbacks if strong else self.fast_fallbacks) if m != preferred]]
+        # Skip models still cooling down from a 429; if all are, try the one that recovers first.
+        chain = [m for m in full_chain if COOLDOWN.remaining(m) == 0] or [min(full_chain, key=COOLDOWN.remaining)]
         for index, model in enumerate(chain):
+            PACER.acquire(model)
             self.throttle.wait()
             # Lite models may not accept a thinking level; reasoning models get a bounded one.
             call_config = config if "lite" in model else config.model_copy(
@@ -175,6 +183,10 @@ class GeminiClient:
             try:
                 return model, self.client.models.generate_content(model=model, contents=prompt, config=call_config)
             except errors.APIError as exc:
+                if exc.code == 429:
+                    COOLDOWN.cool(model, retry_delay_seconds(exc, DEFAULT_COOLDOWN_SECONDS))
+                elif exc.code in (500, 503, 504):
+                    COOLDOWN.cool(model, OVERLOAD_COOLDOWN_SECONDS)
                 if exc.code in (429, 500, 503, 504) and index < len(chain) - 1:
                     logger.warning("%s unavailable (%s); falling back to %s", model, exc.code, chain[index + 1])
                     continue
@@ -192,6 +204,7 @@ class GeminiClient:
         for start in range(0, len(texts), batch_size):
             batch = texts[start : start + batch_size]
             for attempt in range(5):
+                ensure_budget()
                 self.embed_limiter.acquire(len(batch))
                 try:
                     response = self.client.models.embed_content(
@@ -208,11 +221,35 @@ class GeminiClient:
                     self._raise(exc)
                 except Exception as exc:
                     raise RetryableError(f"Gemini request failed: {type(exc).__name__}: {exc}") from exc
+            self._record_embedding(batch)
             # Gemini only normalises full-size (3072-d) embeddings; truncated ones must be renormalised.
             vectors.extend(normalise(list(embedding.values)) for embedding in response.embeddings)
         if len(vectors) != len(texts) or any(len(v) != EMBEDDING_DIMENSION for v in vectors):
             raise RetryableError("Embedding response had the wrong shape")
         return vectors
+
+
+    def _record_embedding(self, batch: list[str]) -> None:
+        """Embedding responses carry no token counts; count them with the (free) countTokens endpoint."""
+        try:
+            tokens, estimated = self.client.models.count_tokens(model=self.embedding_model, contents=batch).total_tokens, False
+        except Exception:
+            tokens, estimated = sum(len(text) for text in batch) // 4, True  # ~4 characters per token
+        record_call(model=self.embedding_model, operation="embed", input_tokens=tokens or 0, estimated=estimated)
+
+
+def _record_generation(model: str, usage) -> None:
+    if usage is None:
+        record_call(model=model, operation="generate", input_tokens=0, estimated=True)
+        return
+    thinking = usage.thoughts_token_count or 0
+    record_call(
+        model=model, operation="generate",
+        input_tokens=(usage.prompt_token_count or 0) + (usage.tool_use_prompt_token_count or 0),
+        cached_tokens=usage.cached_content_token_count or 0,
+        output_tokens=(usage.candidates_token_count or 0) + thinking,
+        thinking_tokens=thinking,
+    )
 
 
 _client: LLMClient | None = None

@@ -1,6 +1,7 @@
 """API shapes for the research agent's trace and the analyst chat (ADR 0008)."""
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
@@ -49,6 +50,7 @@ class RoundOut(BaseModel):
 
 
 class TraceTotals(BaseModel):
+    cost_usd: Decimal = Decimal("0")  # list price of every model call this job made (cost ledger, ADR 0009)
     researchers: int
     tool_calls: int
     revisions: int

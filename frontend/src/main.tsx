@@ -15,6 +15,7 @@ import { NotFound } from "./pages/NotFound";
 import { Overview } from "./pages/Overview";
 import { Reports } from "./pages/Reports";
 import { Research } from "./pages/Research";
+import { Costs } from "./pages/Costs";
 import { Settings } from "./pages/Settings";
 
 const ReportPage = lazy(() => import("./pages/Report").then((m) => ({ default: m.ReportPage })));
@@ -38,6 +39,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/reports/:jobId" element={<ReportPage />} />
               <Route path="/companies" element={<Companies />} />
               <Route path="/companies/:ticker" element={<CompanyPage />} />
+              <Route path="/costs" element={<Costs />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

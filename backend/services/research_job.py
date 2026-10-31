@@ -21,7 +21,8 @@ from backend.schemas.research import (
     ResearchJobResponse,
     StageRunResponse,
 )
-from backend.services.errors import BadRequestError, ConflictError, InvalidStateError, NotFoundError
+from backend.costs.budget import budget_status
+from backend.services.errors import BadRequestError, ConflictError, InvalidStateError, LimitReachedError, NotFoundError
 
 
 def fingerprint(request: ResearchCreateRequest) -> str:
@@ -63,6 +64,10 @@ class ResearchJobService:
             )
             if existing is not None:
                 return self._replay(existing, request_fingerprint)
+
+        # A spent budget refuses new work up front (a replay above still returns the existing job).
+        if settings.gemini_billing == "paid" and (reason := budget_status(session).blocked_reason):
+            raise LimitReachedError(reason)
 
         try:
             job = self.repository.create(

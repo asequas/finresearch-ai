@@ -3,13 +3,14 @@ import { NavLink, useLocation } from "react-router-dom";
 
 import { useMeta } from "../api/client";
 import { CommandPalette } from "./CommandPalette";
-import { CompanyIcon, Mark, OverviewIcon, ReportIcon, ResearchIcon, SearchIcon, SettingsIcon } from "./icons";
+import { CompanyIcon, CostIcon, Mark, OverviewIcon, ReportIcon, ResearchIcon, SearchIcon, SettingsIcon } from "./icons";
 
 const NAV: { to: string; label: string; icon: ComponentType<{ size?: number }>; end?: boolean }[] = [
   { to: "/", label: "Overview", icon: OverviewIcon, end: true },
   { to: "/research", label: "Research", icon: ResearchIcon },
   { to: "/reports", label: "Reports", icon: ReportIcon },
   { to: "/companies", label: "Companies", icon: CompanyIcon },
+  { to: "/costs", label: "Costs", icon: CostIcon },
 ];
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);

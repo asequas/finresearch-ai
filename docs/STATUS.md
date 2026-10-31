@@ -1,6 +1,6 @@
 # FinResearch AI: Status
 
-Last updated: 2026-10-31 (after the LangGraph research agent and Ask the analyst, ADR 0008).
+Last updated: 2026-10-31 (after cost controls and the Costs tab, ADR 0009).
 Labels: **verified** = demonstrated by a test or a command this session; **unverified** = built, not yet demonstrated
 against real external services; **proposed** = not built.
 
@@ -13,6 +13,10 @@ against real external services; **proposed** = not built.
 | Agent on live data: MSFT completed through three Gemini 503 attempts, resuming the graph each time (finished researchers not repeated); the revision verified worse and the critic restored the better draft. Final: 15/16 supported, 100% quotes verbatim, 100% numbers match | `python -m backend.evals.citations auto 167fb858-…`; `/research/{id}/trace` |
 | Agent self-correction on live data: NVDA's critic sent one unsupported claim and one empty-handed question back; after the revision all 16 claims were supported (100% quotes, 100% numbers), in 4 min 47 s | `/research/cb8b23ad-…/trace` |
 | Ask the analyst: tool-using follow-up agent; citations checked against the filing (live: 2 of 2 quotes verified on MSFT); 429 at the turn cap, 503 with Retry-After when the provider is busy, question + answer committed together | `tests/integration/test_analyst_chat.py`, playwright-cli session |
+| Cost ledger (ADR 0009): every Gemini response is a priced row (input/cached/output/thinking tokens, dated list price in Decimal, billed vs free tier), attributed to job and stage even inside LangGraph's parallel researcher threads; embeddings counted with countTokens | `tests/integration/test_costs.py`, `tests/unit/test_pricing.py`, `test_research_agent.py::test_every_model_call_lands_in_the_cost_ledger…` |
+| Spend caps: $1/day and $5/month on billed calls; new research and chat refused with 429 and the reset time; running jobs stop resumably; free tier never blocks | `tests/integration/test_costs.py` |
+| Fewer wasted calls and tokens: a 429 puts the model in cool-down so later calls skip it; old researcher tool results compacted to citable headers; fallback chain limited to priced models | `tests/unit/test_llm_fallback.py`, `tests/unit/test_agent_cost_controls.py` |
+| Costs tab (`/costs`): caps with meters, usage by day/model/stage/job, method note; job page shows each job's cost; phone layout without page overflow | playwright-cli at 1440 and 390, zero console errors |
 | Agent trace UI (job page) and chat sheet (report) in the browser at 1440 and 390, zero console errors | playwright-cli, `docs/screenshots/agent-trace.png`, `analyst-chat.png` |
 | Retrieval quality: tuned hybrid + MiniLM rerank vs the original hybrid on a 30-question gold set: R@1 0.567→0.733, R@3 0.800→0.900, MRR 0.706→0.811, nDCG@6 0.528→0.626 (ADR 0007) | `python -m backend.evals.retrieval` |
 | Live browser walkthrough (playwright-cli) at 1440/768/390: submit from the palette, live stages, cancel/retry, report, claim/figure/metric inspectors, keyboard Escape + focus return, filters in the URL, Markdown export, company workspace; zero console errors | demo session 2026-10-30/31 |
@@ -72,7 +76,7 @@ misleading cancel copy; quote highlight missing for table rows.
 | D2 | Low | Reranking costs ~40 s per job on a laptop CPU (7 sub-questions × ~6 s). |
 | D3 | Low | Gold set is 30 questions; differences of one question (0.033) are noise. |
 | D4 | Low | Debt uses reported long-term debt only; stated in every report's limitations. |
-| D5 | Low | No structured logging beyond stdlib; no per-job cost budget. |
+| D5 | Low | No structured logging beyond stdlib. (Per-call cost tracking and caps: done, ADR 0009.) |
 | D6 | Low | Development identity: every request is `dev@finresearch.local`. Ownership checks exist; authentication doesn't. |
 
 ## Current phase + next 3 tasks
@@ -80,7 +84,7 @@ misleading cancel copy; quote highlight missing for table rows.
 Phases 1–5b: built and verified on real data. Phase 6: scope-reduced by decision (no price data). Phase 7 (deploy):
 CI added; deployment and auth deferred by decision.
 
-1. Paid Gemini tier, then tune agent concurrency and budgets against latency; re-run AAPL. *proposed*
+1. Link billing (Tier 1), set `GEMINI_BILLING=paid`, then tune agent concurrency and budgets against latency; re-run AAPL. *proposed*
 2. Human-label claims from the real reports and score citation correctness against the 95% target. *proposed*
 3. Deployment design (auth, budgets, rate limits, hosting) through the coach protocol. *proposed*
 

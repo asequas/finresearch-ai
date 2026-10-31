@@ -29,9 +29,11 @@ from langgraph.types import Send
 from sqlalchemy import select
 
 from backend.agent import prompts as agent_prompts
+from backend.agent.context import CompactToolResults
 from backend.agent.tools import ToolContext, build_tools, chunk_handle, resolve_handles
 from backend.analysis.retrieval import RetrievedChunk, retrieve
 from backend.core.config import settings
+from backend.costs.ledger import usage_scope
 from backend.models.document_chunk import DocumentChunk
 from backend.models.research_job import ResearchStage
 from backend.pipeline import prompts
@@ -122,7 +124,8 @@ def tracked(deps: AgentDeps, stage: ResearchStage, *, name: str | None = None, b
         ctx.usage = usage
     started = datetime.now(timezone.utc)
     try:
-        yield usage
+        with usage_scope(job_id=ctx.job_id, source="job", stage=name or stage.value):
+            yield usage
     except BaseException as exc:
         deps.queue.finish_stage_run(
             run_id, status="failed", started=started, error_message=f"{type(exc).__name__}: {exc}"[:2000],
@@ -194,6 +197,7 @@ def build_graph(deps: AgentDeps) -> StateGraph:
                     company=ctx.company, ticker=ctx.ticker, tool_calls=settings.agent_tool_calls_per_researcher,
                 ),
                 middleware=[
+                    CompactToolResults(),
                     *agent_model.middleware,
                     # Past the budget, tool calls are refused and the model must answer with what it has.
                     ToolCallLimitMiddleware(run_limit=settings.agent_tool_calls_per_researcher, exit_behavior="continue"),
