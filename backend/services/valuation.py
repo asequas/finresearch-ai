@@ -23,7 +23,7 @@ from backend.valuation.price import MarketPrice, latest_price
 
 # (field, label, unit, editable in a what-if)
 ASSUMPTIONS = [
-    ("base_fcf", "Free cash flow, 3-year average", "USD", False),
+    ("base_fcf", "Free cash flow, normalised", "USD", False),
     ("initial_growth", "Growth, first years", "ratio", True),
     ("high_growth_years", "Years at that growth", "years", True),
     ("fade_years", "Years fading to long-run growth", "years", True),

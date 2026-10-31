@@ -22,6 +22,8 @@ class FcfYear(BaseModel):
     capital_expenditure: Decimal
     share_based_compensation: Decimal
     fcf: Decimal
+    revenue: Decimal | None = None
+    fcf_margin: Decimal | None = None
 
 
 class ProjectionRow(BaseModel):

@@ -58,14 +58,23 @@ def default_inputs(
         interest = (p.interest_expense or Decimal("0")) * (1 - p_tax)
         sbc = p.share_based_compensation or Decimal("0")
         fcf = p.operating_cash_flow + interest - p.capital_expenditure - sbc
+        margin = fcf / p.revenue if p.revenue and p.revenue > 0 else None
         history.append({"fiscal_year": p.fiscal_year, "operating_cash_flow": p.operating_cash_flow,
                         "after_tax_interest": interest, "capital_expenditure": p.capital_expenditure,
-                        "share_based_compensation": sbc, "fcf": fcf})
+                        "share_based_compensation": sbc, "fcf": fcf, "revenue": p.revenue, "fcf_margin": margin})
         if p.share_based_compensation is None:
             notes.append(f"FY{p.fiscal_year}: stock-based compensation not reported, so none is deducted.")
+    # Base FCF: the average FCF margin of recent years applied to the latest revenue. A plain dollar average would
+    # smooth lumpy years too, but drag a fast grower back to old revenue (NVDA: $57B against $91B last year).
     recent = history[-FCF_YEARS:]
-    base_fcf = sum((h["fcf"] for h in recent), Decimal("0")) / len(recent) if recent else None
-    if not recent:
+    margins_fcf = [h["fcf_margin"] for h in recent if h["fcf_margin"] is not None]
+    base_fcf, fcf_margin = None, None
+    if recent and margins_fcf and base.revenue and base.revenue > 0:
+        fcf_margin = sum(margins_fcf, Decimal("0")) / len(margins_fcf)
+        base_fcf = fcf_margin * base.revenue
+    elif recent:
+        base_fcf = sum((h["fcf"] for h in recent), Decimal("0")) / len(recent)
+    else:
         notes.append("Cash from operations or capex isn't reported, so the cash-flow DCF can't be computed.")
 
     # Growth: the revenue record (compound annual growth), capped, then faded to the long-run rate.
@@ -102,8 +111,10 @@ def default_inputs(
     coverage = f"interest coverage {rating.coverage:.1f}x" if rating.coverage is not None else "no interest expense"
 
     sources = {
-        "base_fcf": (f"average reported free cash flow to the firm, FY{recent[0]['fiscal_year']}-{fy}: cash from operations "
-                     "+ after-tax interest − capex − stock-based compensation") if recent else "not available",
+        "base_fcf": ((f"average free-cash-flow margin {fcf_margin:.1%}, FY{recent[0]['fiscal_year']}-{fy}, × {fy} revenue"
+                      if fcf_margin is not None else f"average free cash flow, FY{recent[0]['fiscal_year']}-{fy}")
+                     + "; free cash flow = cash from operations + after-tax interest − capex − stock-based compensation")
+                    if recent else "not available",
         "initial_growth": growth_source,
         "high_growth_years": "default",
         "fade_years": "default (straight line to long-run growth)",
