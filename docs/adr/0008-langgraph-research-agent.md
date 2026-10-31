@@ -41,7 +41,8 @@ plan ──Send×N──▶ researcher ──▶ draft ──▶ verify ──�
 | researcher | LangChain `create_agent` with 4 read-only tools, fanned out with `Send` | Choosing searches and reading further is genuinely iterative |
 | draft | One strong structured call over the passages the researchers cited, plus their notes and the verifier's feedback | Claim writing needs the whole picture at once |
 | verify | ADR 0006's verifier unchanged: verbatim quote check, numbers against metrics, then an LLM judge | Code first; the judge only for what code can't decide |
-| critic | **Code, not a model.** Material claims (importance ≥ 2) judged unsupported or partly supported, plus questions whose researcher found nothing, are routed back for one targeted research round | A routing rule we can state, test and explain beats an LLM deciding whether it's done |
+| critic | **Code, not a model.** Material claims (importance ≥ 2) judged unsupported or partly supported, plus questions whose researcher found nothing, are routed back for one targeted research round. If a revised draft verifies worse than an earlier one, the earlier draft is restored | A routing rule we can state, test and explain beats an LLM deciding whether it's done |
+| restore | Re-saves the best earlier draft (kept in graph state with the chunk behind each excerpt id), then goes back to verify | A self-correction loop must be monotonic: revising may only help |
 | synthesize | ADR 0006's report writer, recording how the research was done | Unchanged |
 
 **Tools** (`backend/agent/tools.py`):
@@ -134,6 +135,21 @@ needed.
   google-genai moved to 2.34.
 - Ten user-visible stages instead of eight (plan, research and draft replace analyze).
 
+## Measured on live runs (2026-10-31, Gemini free tier)
+
+| Job | What happened | Final claims | Quotes verbatim | Numbers match |
+| --- | --- | --- | --- | --- |
+| MSFT | Gemini 503s during research across 3 attempts: each retry resumed the graph and re-ran only the unfinished researcher (q2-q4 ran once). Revision verified worse (10.5 vs 15.5 material claims supported), so the critic restored round 0 | 15 supported, 1 partly | 100% | 100% |
+| AAPL (before the restore guard) | All strong models rate-limited at redraft time; the lite fallback dropped every quote and supported claims fell from 17 to 7. This run is why the restore guard exists | 7 supported, 8 unsupported | 0% | 100% |
+
+Two more lessons from these runs became code and tests:
+- On a retry, a researcher answered from memory with zero tool calls and seven invented handles. Answers without a
+  tool call are now discarded, and the prompt requires a tool first.
+- The lite model packed junk into a citation handle (`P:8272934b,quote:`), which marked real quotes unverified.
+  Handles are now parsed from the 8 hex digits.
+
+Cost per job: ~110k input and ~9k output tokens (MSFT, including one revision round), 16-21 tool calls.
+
 ## Failure modes
 
 | Failure | Detection | Recovery |
@@ -144,6 +160,8 @@ needed.
 | Model invents a passage handle | Not in the tool context's `seen` list | Dropped and recorded in the trace |
 | Every researcher comes back empty | No handles to resolve | The draft falls back to one plain retrieval of the request |
 | Revision doesn't fix a claim | Verdicts after round 1 | Critic stops at the budget; the claim stays flagged in the ledger |
+| Revision makes the draft worse (e.g. a weak fallback model) | Critic compares the round's verified material claims with earlier rounds | The better draft is restored and re-verified; the trace shows why |
+| Researcher answers without using tools | Empty tool trace | Its findings are discarded; it can't put text into the draft |
 | Stale thread after a crash at the very end | Saved state has values but no pending nodes | Thread deleted; graph restarts cleanly |
 | Cancel during research | Tool calls check `ctx.checkpoint()` | Stops within one tool call; no report is written |
 

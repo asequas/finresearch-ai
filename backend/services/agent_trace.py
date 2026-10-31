@@ -29,6 +29,8 @@ class AgentTraceService:
             if run.agent_name != "researching":
                 continue
             meta = run.extra_metadata or {}
+            if not meta.get("question"):
+                continue  # a failed attempt recorded before runs carried their task; its retry is listed instead
             researchers.append(ResearcherOut(
                 task_id=meta.get("task_id", "?"), kind=meta.get("kind", "question"), question=meta.get("question", ""),
                 round=meta.get("round", 0), status=run.status, attempt=run.attempt, started_at=run.started_at,

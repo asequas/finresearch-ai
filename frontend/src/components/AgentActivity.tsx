@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 import type { Researcher, ToolCall, Trace } from "../api/client";
 import { useTrace } from "../api/client";
 import { SECTION_LABEL, duration } from "../lib/format";
@@ -127,6 +129,11 @@ function Critic({ round }: { round: Trace["rounds"][number] }) {
 export function AgentActivity({ jobId, live }: { jobId: string; live: boolean }) {
   const trace = useTrace(jobId, live);
   const data = trace.data;
+  // The report links here as "#agent"; scroll once the trace has loaded and the panel has its real height.
+  const ready = !!data;
+  useEffect(() => {
+    if (ready && window.location.hash === "#agent") document.getElementById("agent")?.scrollIntoView();
+  }, [ready]);
 
   const aside = data && data.mode === "agent" && (
     <span className="num">{data.totals.researchers} agents, {data.totals.tool_calls} tool calls{data.totals.revisions ? `, ${data.totals.revisions} revision` : ""}</span>
