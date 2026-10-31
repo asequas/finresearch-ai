@@ -1,6 +1,6 @@
 # ADR 0011: Valuation v2: capitalised R&D, advantage-aware defaults, and a price check
 
-- Status: accepted (2026-11-01)
+- Status: superseded by ADR 0012 (2026-11-01)
 - Refines: ADR 0010 (the DCF engine is unchanged; calculation version `dcf-1.1`)
 
 ## Context

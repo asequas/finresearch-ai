@@ -32,3 +32,6 @@ dist/
 *.log
 # Local data and tooling output
 .cache/
+
+# browser-automation snapshots
+.playwright-cli/
