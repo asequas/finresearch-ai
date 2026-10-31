@@ -22,12 +22,13 @@ from backend.pipeline.base import (
     ShutdownRequested,
 )
 
-_OURS = (PermanentError, RetryableError, LeaseLost, CancelRequested, ShutdownRequested)
+# Errors that belong to the job (queue backoff, cancel, lease), never to the model.
+JOB_ERRORS = (PermanentError, RetryableError, LeaseLost, CancelRequested, ShutdownRequested)
 
 
 def provider_error(exc: BaseException) -> BaseException:
     """Translate a model failure into the queue's vocabulary: busy (minutes), retryable, or permanent."""
-    if isinstance(exc, _OURS):
+    if isinstance(exc, JOB_ERRORS):
         return exc
     code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
     if isinstance(exc, (ModelAuthenticationError, ModelPermissionDeniedError)) or code in (401, 403):
