@@ -23,6 +23,9 @@ export const ReportIcon = (p: IconProps) => (
 export const CompanyIcon = (p: IconProps) => (
   <Icon {...p}><path d="M4 21V5l8-2v18M12 8l8 3v10M3 21h18M7 8h2M7 12h2M7 16h2M15 14h2M15 18h2" /></Icon>
 );
+export const CostIcon = (p: IconProps) => (
+  <Icon {...p}><circle cx="12" cy="12" r="8.5" /><path d="M14.5 9.2c-.5-.8-1.4-1.2-2.5-1.2-1.4 0-2.5.8-2.5 2s1.1 1.7 2.5 2 2.5.8 2.5 2-1.1 2-2.5 2c-1.1 0-2-.4-2.5-1.2M12 6.5V8M12 16v1.5" /></Icon>
+);
 export const SettingsIcon = (p: IconProps) => (
   <Icon {...p}><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></Icon>
 );
