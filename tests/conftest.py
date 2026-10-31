@@ -62,6 +62,22 @@ def no_gemini_calls():
 
 
 @pytest.fixture(scope="session", autouse=True)
+def fixed_risk_free_rate():
+    """The DCF's risk-free rate is pinned in tests: no treasury.gov calls, no dependence on the dev cache."""
+    from datetime import date
+    from decimal import Decimal
+
+    from backend.valuation import market
+
+    original = market.latest_risk_free_rate
+    market.latest_risk_free_rate = lambda *args, **kwargs: market.RiskFreeRate(
+        Decimal("0.0450"), date(2026, 10, 30), market.TREASURY_PAGE
+    )
+    yield
+    market.latest_risk_free_rate = original
+
+
+@pytest.fixture(scope="session", autouse=True)
 def migrated_database():
     command.upgrade(Config("alembic.ini"), "head")
     yield

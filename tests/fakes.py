@@ -36,6 +36,14 @@ COMPANY_FACTS = {
             "NetCashProvidedByUsedInOperatingActivities": {"units": {"USD": [_flow(25e9, 2024)]}},
             "PaymentsToAcquirePropertyPlantAndEquipment": {"units": {"USD": [_flow(5e9, 2024)]}},
             "StockholdersEquity": {"units": {"USD": [_instant(60e9, 2023), _instant(70e9, 2024)]}},
+            # DCF inputs (ADR 0010)
+            "DepreciationAndAmortization": {"units": {"USD": [_flow(3e9, 2024)]}},
+            "IncomeTaxExpenseBenefit": {"units": {"USD": [_flow(6e9, 2024)]}},
+            "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest": {"units": {"USD": [_flow(30e9, 2024)]}},
+            "InterestExpense": {"units": {"USD": [_flow(0.5e9, 2024)]}},
+            "CashAndCashEquivalentsAtCarryingValue": {"units": {"USD": [_instant(8e9, 2023), _instant(9e9, 2024)]}},
+            "LongTermDebt": {"units": {"USD": [_instant(10e9, 2023), _instant(10e9, 2024)]}},
+            "WeightedAverageNumberOfDilutedSharesOutstanding": {"units": {"shares": [_flow(1e9, 2024)]}},
         }
     }
 }
@@ -143,13 +151,15 @@ class FakeLLM:
 
 
 def ingest(make_job, tmp_path, ticker="WDGT"):
-    """Run the deterministic stages (resolve → index) for a new job and return its id."""
+    """Run the deterministic stages (resolve → value → index) for a new job and return it."""
     from backend.pipeline.research import Services, research_stages
     from backend.worker.main import Worker
 
     job = make_job(ticker=ticker)
     services = Services(sec_factory=lambda: FakeSec(tmp_path), llm_factory=FakeLLM)
-    Worker(stages_factory=lambda: research_stages(services)[:5], retry_base_seconds=0).run_once()
+    stages = research_stages(services)
+    upto = next(i for i, stage in enumerate(stages) if stage.name.value == "indexing_documents")
+    Worker(stages_factory=lambda: stages[: upto + 1], retry_base_seconds=0).run_once()
     return job
 
 

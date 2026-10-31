@@ -201,3 +201,27 @@ def test_running_page_headers_do_not_end_a_section():
     assert sections["business"].text.count("Supply constraints") == 20
     assert sections["risk_factors"].text.count("Supply constraints") == 30
     assert "UNRESOLVED" not in sections["risk_factors"].text
+
+
+def test_extracts_the_dcf_inputs_with_concept_fallbacks():
+    """D&A, taxes and the bridge items come from their own concepts; later fallbacks fill gaps (ADR 0010)."""
+    company_facts = facts(
+        Revenues={"USD": [flow(1000, "2023-10-01", "2024-09-30", "2024-11-01")]},
+        DepreciationAndAmortization={"USD": [flow(55, "2023-10-01", "2024-09-30", "2024-11-01")]},
+        IncomeTaxExpenseBenefit={"USD": [flow(40, "2023-10-01", "2024-09-30", "2024-11-01")]},
+        IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest={
+            "USD": [flow(200, "2023-10-01", "2024-09-30", "2024-11-01")]
+        },
+        MarketableSecuritiesCurrent={"USD": [instant(70, "2024-09-30", "2024-11-01")]},
+        OperatingLeaseLiability={"USD": [instant(90, "2024-09-30", "2024-11-01")]},
+    )
+
+    [period] = extract_annual_periods(company_facts).periods
+
+    assert period.values["depreciation_amortization"] == Decimal("55")
+    assert period.provenance["depreciation_amortization"]["concept"] == "us-gaap:DepreciationAndAmortization"
+    assert period.values["income_tax_expense"] == Decimal("40")
+    assert period.values["pretax_income"] == Decimal("200")
+    assert period.values["short_term_investments"] == Decimal("70")
+    assert period.values["lease_liabilities"] == Decimal("90")
+    assert "minority_interest" not in period.values

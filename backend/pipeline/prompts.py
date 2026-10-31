@@ -103,7 +103,10 @@ Write 14-22 claims that together answer the request. Rules:
 - claim_type "interpretation": your analytical judgement. Must cite the metrics and/or quotes it relies on.
 - Cover every section that the data supports: {sections}.
 - Quotes must be exact substrings of a single excerpt (you may join two parts with "..."). Prefer one sentence.
-- If the evidence is thin for something important, say so in an interpretation rather than guessing."""
+- If the evidence is thin for something important, say so in an interpretation rather than guessing.
+- Metrics starting with "DCF" come from a discounted cash flow model built on stated assumptions. A claim citing one
+  is a calculation: call it an estimate and name the assumption it rests on (growth or cost of capital), citing that
+  metric too. Never compare it with a share price."""
 
 JUDGE_PROMPT = """For each claim, decide whether the cited material supports it.
 - supported: the quotes/metrics fully establish the claim.
@@ -128,6 +131,8 @@ Company: {company} ({ticker}). Data as of fiscal period ending {period_end}.
 Write the report. Rules:
 - Use only the claims and metrics above. Every key point must cite claim ids.
 - Scenarios: bull/base/bear. Each assumption must be anchored to metric ids and/or claim ids, listed in `basis` (ids only).
-  No price targets or valuation multiples (market price data is out of scope).
+  No share prices, price targets or valuation multiples (market price data is out of scope). You may cite the DCF
+  metrics (value per share, cost of capital, growth) as an estimate of intrinsic value with their assumptions; never
+  compare them with a share price or call the stock cheap or expensive.
 - Risks: 3-6, ordered by severity, each citing claim ids.
 - No buy/sell/hold recommendations; describe what the evidence implies and what would change the view."""

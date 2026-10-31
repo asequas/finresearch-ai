@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useRef } from "react";
 
 import type { Claim, Evidence, Metric } from "../api/client";
-import { CLAIM_TYPE_LABEL, FIELD_LABEL, SECTION_LABEL, date, metricDisplay, usd } from "../lib/format";
+import { CLAIM_TYPE_LABEL, FIELD_LABEL, SECTION_LABEL, date, metricDisplay, pct, usd } from "../lib/format";
 import { CloseIcon, ExternalIcon } from "./icons";
 import { VerificationPill } from "./ui";
 
@@ -95,18 +95,30 @@ function MetricBlock({ metric, divided = true }: { metric: Metric; divided?: boo
           </tr>
         </thead>
         <tbody>
-          {Object.entries(metric.inputs as Record<string, { name: string; value: string; period: string }>).map(([key, input]) => (
+          {Object.entries(metric.inputs as Record<string, { name: string; value: string; period: string; unit?: string }>).map(([key, input]) => (
             <tr key={key} className="border-t border-rule">
-              <td className="py-1.5">{FIELD_LABEL[input.name] ?? input.name}</td>
+              <td className="py-1.5">{FIELD_LABEL[input.name] ?? input.name.replaceAll("_", " ")}</td>
               <td className="num py-1.5 text-muted">{input.period}</td>
-              <td className="num py-1.5 text-right">{input.name === "eps" ? usd(input.value, { compact: false }) : usd(input.value)}</td>
+              <td className="num py-1.5 text-right">{inputValue(input)}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p className="mt-2 text-small text-muted">Inputs come from SEC XBRL company facts. Calculation version <span className="num">{metric.calculation_version}</span>.</p>
+      <p className="mt-2 text-small text-muted">
+        {metric.key.startsWith("dcf_")
+          ? "A discounted cash flow estimate from the filings and stated assumptions; see the Valuation section for every input and its source."
+          : "Inputs come from SEC XBRL company facts."}{" "}
+        Calculation version <span className="num">{metric.calculation_version}</span>.
+      </p>
     </div>
   );
+}
+
+function inputValue(input: { name: string; value: string; unit?: string }): string {
+  if (input.unit === "ratio") return pct(input.value, { digits: 2 });
+  if (input.unit === "number") return Number(input.value).toFixed(2);
+  if (input.unit === "shares") return `${(Number(input.value) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 0 })}M`;
+  return input.name === "eps" ? usd(input.value, { compact: false }) : usd(input.value);
 }
 
 export function Inspector({ target, onClose }: { target: InspectTarget | null; onClose: () => void }) {

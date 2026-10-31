@@ -25,8 +25,8 @@ Real research on Amazon, Microsoft and NVIDIA filings, run end to end through th
 | **Report.** The answer first, then summary, financials, scenarios, risks and the evidence ledger. | **Claim inspector.** Every claim opens to the filing passage with the quoted words highlighted. |
 | ![Company workspace](docs/screenshots/company.png) | ![Phone](docs/screenshots/phone-report.png) |
 | **Company workspace.** Five years of reported figures and every report on the company. | **Phone.** The same report, laid out for a small screen. |
-| ![Costs](docs/screenshots/costs.png) | |
-| **Costs.** Every model call priced from its token counts, against daily and monthly caps; by day, model, stage and job. | |
+| ![Costs](docs/screenshots/costs.png) | ![Valuation](docs/screenshots/valuation.png) |
+| **Costs.** Every model call priced from its token counts, against daily and monthly caps; by day, model, stage and job. | **Valuation.** A deterministic DCF with every assumption sourced, the projection, sensitivity grid and a what-if. |
 
 ## What makes it trustworthy
 
@@ -37,6 +37,9 @@ Real research on Amazon, Microsoft and NVIDIA filings, run end to end through th
 - **Every quote is checked literally** against the stored filing text before a fact-checking model judges the rest.
 - **Every reported figure carries provenance**: XBRL concept, filing accession, filed date and period.
 - **Failures are visible.** Missing data, skipped metrics and unsupported claims appear in the report.
+- **Intrinsic value is computed, not generated.** A deterministic DCF (Damodaran's FCFF model, tested against his
+  own worked example) values each company from its filings, with every assumption sourced and dated, a sensitivity
+  range and a what-if panel. The report may quote it; the verifier checks the numbers.
 - **Spend is measured and capped.** Every model call is a priced row in a cost ledger (input, cached, output and
   thinking tokens at Google's dated list prices); daily and monthly caps stop new work, and the Costs tab shows
   where the money goes. A research job costs about $0.04–0.11 at paid-tier prices.
@@ -75,6 +78,7 @@ tool calls live.
 | Fetch filings | deterministic | latest 10-K and any newer 10-Q |
 | Extract financials | deterministic | five fiscal years from XBRL, latest filing wins on restatement |
 | Compute metrics | deterministic | margins, FCF, growth, ROE, leverage, CAGR, each with formula and inputs |
+| Value (DCF) | deterministic | FCFF DCF: industry beta, Treasury 10-year, Damodaran ERP; value per share, range, sensitivity |
 | Index filings | deterministic + embeddings | section-aware chunks, `tsvector` + HNSW `vector(768)` |
 | Plan | LLM | 3-6 sub-questions, each with a focus |
 | Research | parallel tool-using agents | each researcher searches (tuned hybrid + local cross-encoder rerank), reads passages and pulls metrics, within a call budget |
@@ -91,7 +95,8 @@ Design decisions, alternatives and failure modes are written up as ADRs in [`doc
 [pipeline, retrieval and LLM use](docs/adr/0006-research-pipeline-retrieval-and-llm.md) ·
 [retrieval tuning and reranking](docs/adr/0007-retrieval-tuning-and-reranking.md) ·
 [LangGraph research agent](docs/adr/0008-langgraph-research-agent.md) ·
-[LLM cost controls and ledger](docs/adr/0009-llm-cost-controls-and-ledger.md).
+[LLM cost controls and ledger](docs/adr/0009-llm-cost-controls-and-ledger.md) ·
+[DCF intrinsic value](docs/adr/0010-dcf-intrinsic-value.md).
 
 Retrieval quality on a 30-question gold set over real filings (ADR 0007):
 
@@ -176,6 +181,7 @@ backend/
   analysis/       metrics (Decimal), chunking, hybrid retrieval, verification
   llm/            provider adapter (Gemini): retry classification, model cool-downs, pacing
   costs/          cost ledger, dated price table, spend caps
+  valuation/      DCF engine, default assumptions, Damodaran reference data, Treasury rate, backfill
   worker/         the worker process: claim, heartbeat, retry, release
   evals/          evidence-quality metrics and label scoring
 database/migrations/   Alembic revisions (never edit an applied one)
@@ -185,5 +191,5 @@ docs/                  STATUS.md, ADRs, INTERVIEW_NOTES.md
 
 ## Scope (v1)
 
-US-listed, non-financial companies that file a 10-K, in USD. No market price data, so no valuation multiples or
-price targets. Single development user until authentication (planned with deployment).
+US-listed, non-financial companies that file a 10-K, in USD. No market price data: the DCF gives intrinsic value
+per share, but there are no valuation multiples, price targets or "undervalued by X%". Single development user until authentication (planned with deployment).

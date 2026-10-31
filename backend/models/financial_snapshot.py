@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from backend.models.research_job import ResearchJob
 
 # Reported line items copied from SEC XBRL. Values are in `currency` units (not thousands).
-MONEY_FIELDS = (
+CORE_MONEY_FIELDS = (
     "revenue",
     "cost_of_revenue",
     "gross_profit",
@@ -32,6 +32,17 @@ MONEY_FIELDS = (
     "stockholders_equity",
     "debt",
 )
+# Extra facts the DCF needs (ADR 0010). Often legitimately absent (no leases, no minority interest), so reports
+# don't list them as gaps; the valuation states its own assumptions when they're missing.
+VALUATION_MONEY_FIELDS = (
+    "depreciation_amortization",
+    "income_tax_expense",
+    "pretax_income",
+    "short_term_investments",
+    "lease_liabilities",
+    "minority_interest",
+)
+MONEY_FIELDS = CORE_MONEY_FIELDS + VALUATION_MONEY_FIELDS
 
 
 def _money() -> Mapped[Decimal | None]:
@@ -95,6 +106,12 @@ class FinancialSnapshot(Base):
     total_liabilities: Mapped[Decimal | None] = _money()
     stockholders_equity: Mapped[Decimal | None] = _money()
     debt: Mapped[Decimal | None] = _money()
+    depreciation_amortization: Mapped[Decimal | None] = _money()
+    income_tax_expense: Mapped[Decimal | None] = _money()
+    pretax_income: Mapped[Decimal | None] = _money()
+    short_term_investments: Mapped[Decimal | None] = _money()
+    lease_liabilities: Mapped[Decimal | None] = _money()
+    minority_interest: Mapped[Decimal | None] = _money()
 
     eps: Mapped[Decimal | None] = mapped_column(Numeric(20, 6), nullable=True)
     diluted_shares: Mapped[Decimal | None] = mapped_column(Numeric(24, 4), nullable=True)
