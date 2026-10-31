@@ -16,8 +16,13 @@ claim, and the report lets you open any statement to the exact filing passage, f
 
 **▶ [Watch the full 2-minute walkthrough](docs/demo/finresearch-demo.mp4)** (MP4, recorded on the real app with real
 reports on Microsoft's 10-K; no live model calls during the recording).
+https://github.com/user-attachments/assets/052b5d0a-8247-49fb-98fd-71ef3b0956cc
+
 
 ## At a glance
+
+
+
 
 | | Result | Evidence |
 | --- | --- | --- |
