@@ -174,6 +174,7 @@ class ReportService:
             metrics=list(metric_out.values()),
             claims=claim_out,
             verification_summary=VerificationSummary(total=len(claims), **counts),
+            research=(report.full_report or {}).get("research"),
         )
 
     def list_companies(self, session: Session, *, user_id: UUID) -> list[CompanySummary]:

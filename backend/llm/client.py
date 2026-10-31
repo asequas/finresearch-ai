@@ -79,6 +79,10 @@ class _WindowLimiter:
             time.sleep(wait)
 
 
+# One pacing budget per process, shared by the structured client and the agent's tool-calling models.
+GEMINI_THROTTLE = _Throttle(min_interval=1.0)
+
+
 def retry_delay_seconds(exc: Exception, default: float = 30.0) -> float:
     """The API's suggested wait (RetryInfo.retryDelay, e.g. '36s') when it gives one."""
     match = re.search(r"retryDelay['\"]?\s*[:=]\s*['\"]?(\d+(?:\.\d+)?)s", str(getattr(exc, "details", "")) + str(exc))
@@ -108,7 +112,7 @@ class GeminiClient:
         self.strong_fallbacks = settings.gemini_strong_fallbacks
         self.fast_fallbacks = settings.gemini_fast_fallbacks
         self.embedding_model = settings.gemini_embedding_model
-        self.throttle = _Throttle(min_interval=1.0)
+        self.throttle = GEMINI_THROTTLE
         self.embed_limiter = _WindowLimiter(settings.gemini_embed_per_minute)
 
     @staticmethod

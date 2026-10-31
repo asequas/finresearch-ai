@@ -132,6 +132,8 @@ class ReportResponse(BaseModel):
     metrics: list[MetricOut]
     claims: list[ClaimOut]
     verification_summary: VerificationSummary
+    # How the evidence was gathered (agent runs only): questions, researchers, revision rounds.
+    research: dict | None = None
 
 
 class CompanySummary(BaseModel):

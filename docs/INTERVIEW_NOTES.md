@@ -98,3 +98,27 @@ Write your answer, then compare it with [ADR 0001](adr/0001-postgres-backed-job-
   was scored by its best 450-character window.
 - **Fuse, don't replace.** Replacing the ranking raised R@1 but lost recall; RRF over both rankings kept both.
 - **Labels that survive re-indexing.** Relevance = the chunk contains a verified answer phrase, not a chunk id.
+
+## Agentic research on LangGraph (ADR 0008)
+
+- **Agents where routing is dynamic, code where it isn't.** Fetching filings and computing metrics stay plain code;
+  only "where should I look next?" became an agent loop. The critic that decides whether to re-research is an `if`
+  over verifier verdicts, not a model ([`backend/agent/graph.py`](../backend/agent/graph.py)).
+- **Fan-out/fan-in with `Send` and a reducer.** Each planned question goes to its own researcher; `findings` is an
+  `operator.add` channel so parallel results merge instead of overwriting. The draft node runs once every researcher
+  in the superstep has finished.
+- **Bounded self-correction.** Material claims that fail verification go back to a targeted researcher with the
+  verifier's reason. Budgets: one revision round, 6 tool calls and 8 model calls per researcher, at most 6 researchers.
+- **Two checkpointers, one owner each.** The queue row owns the job (lease, attempts, cancel); `PostgresSaver` owns the
+  position inside the graph. Side effects are lease-fenced, so the unfenced checkpoint can only cause a redo. Tested:
+  a 429 in one researcher resumes the graph without re-running the researchers that finished
+  ([`tests/integration/test_research_agent.py`](../tests/integration/test_research_agent.py)).
+- **Grounding the agent.** Researchers can only cite passage handles a tool returned (others are dropped and logged);
+  quotes are checked verbatim in code; the chat agent's citations go through the same check and are shown as verified
+  or not.
+- **Retries belong to one layer.** LangChain's model client runs with `max_retries=0`; provider errors are mapped to
+  the queue's busy/retryable/permanent types by a middleware, so backoff is visible and bounded in one place.
+- **Observability without new infra.** Every node and researcher is an `agent_runs` row with its tool calls; the job
+  page renders them live from `GET /research/{id}/trace`.
+- **The chat's record is a table, not a checkpointer.** One source of truth; the agent is rebuilt from recent turns per
+  question, and the question and answer commit together.

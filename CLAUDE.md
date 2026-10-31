@@ -93,7 +93,7 @@ docker exec -it finresearch-postgres psql -U finresearch -d finresearch
 | 6. Valuation, risk, comparison | Real analytical value | Peer comparison with consistent definitions, scenarios with explicit assumptions, risk/contradiction detection, sector-aware metrics (banks ≠ SaaS) |
 | 7. Production-minded deploy | Public demo | Real auth + ownership checks, CI, structured logs, per-job cost tracking + budgets, rate limits, Docker, cheap AWS deploy, README with architecture diagram |
 
-LangGraph comes in when there's a real multi-stage workflow to orchestrate (Phase 4+), not before. Queue technology (Celery+Redis vs alternatives such as a Postgres-backed queue) is an **open decision for Phase 3** and goes through the coach protocol.
+LangGraph runs the research stage as an agent graph (ADR 0008): planner, parallel tool-using researchers, verifier, code-routed bounded revision, Postgres checkpointer inside the durable queue. Queue technology (Celery+Redis vs alternatives such as a Postgres-backed queue) is an **open decision for Phase 3** and goes through the coach protocol.
 
 ## Frontend: you own the design
 

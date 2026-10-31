@@ -173,7 +173,7 @@ def default_stages() -> Sequence[Stage]:
         return stub_stages()
     from backend.pipeline.research import research_stages
 
-    return research_stages()
+    return research_stages(agentic=settings.pipeline != "linear")
 
 
 def main() -> None:
