@@ -185,15 +185,35 @@ class ScriptedResearcher(BaseChatModel):
             subject = re.search(r"(?:sub-question: |rejected this claim from the draft report:\n  )(.+)", task)
             call = {"name": "search_filings", "args": {"query": subject.group(1) if subject else task[:80]}}
         else:
-            handles = re.findall(r"\[(P:[0-9a-f]{8})\]", results[-1].content)
-            call = {"name": "Findings", "args": {
-                "answer": "The filings address this directly.",
-                "notes": [{"text": "Widgetco describes this in its 10-K.", "passages": handles[:2] + ["P:deadbeef"], "metrics": []}],
-                "gaps": [],
-            }}
+            call = self.finish(results[-1].content)
         message = AIMessage(content="", tool_calls=[{**call, "id": f"call_{uuid.uuid4().hex[:8]}", "type": "tool_call"}])
         message.usage_metadata = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
         return ChatResult(generations=[ChatGeneration(message=message)])
+
+
+    def finish(self, tool_output: str) -> dict:
+        handles = re.findall(r"\[(P:[0-9a-f]{8})\]", tool_output)
+        return {"name": "Findings", "args": {
+            "answer": "The filings address this directly.",
+            "notes": [{"text": "Widgetco describes this in its 10-K.", "passages": handles[:2] + ["P:deadbeef"], "metrics": []}],
+            "gaps": [],
+        }}
+
+
+class ScriptedAnalyst(ScriptedResearcher):
+    """Answers a chat question: one search, then a ChatAnswer quoting the first passage (plus one bad quote)."""
+
+    def finish(self, tool_output: str) -> dict:
+        first = tool_output.split("\n\n[")[0]
+        handle = re.search(r"\[(P:[0-9a-f]{8})\]", first).group(1)
+        sentence = next(line for line in first.splitlines()[1:]
+                        if len(line.split()) >= 6 and not line.lower().startswith("item"))
+        return {"name": "ChatAnswer", "args": {
+            "answer": "Steel supply is the main input risk the filing names.",
+            "citations": [{"handle": handle, "quote": sentence},
+                          {"handle": handle, "quote": "Widgetco has no supply risks of any kind whatsoever."}],
+            "confidence": "high",
+        }}
 
 
 def scripted_agent_model(model: ScriptedResearcher):
