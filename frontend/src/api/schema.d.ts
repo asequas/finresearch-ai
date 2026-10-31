@@ -199,6 +199,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/costs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Costs
+         * @description What the AI calls have cost: billed spend against the caps, and list-price usage by day, model, stage and job.
+         *
+         *     Spend is per deployment (one Gemini project), not per user.
+         */
+        get: operations["get_costs_api_v1_costs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -242,6 +264,31 @@ export interface components {
              * @default []
              */
             claim_ids: string[];
+        };
+        /** BudgetOut */
+        BudgetOut: {
+            /** Billing */
+            billing: string;
+            /** Daily Cap */
+            daily_cap: string;
+            /** Monthly Cap */
+            monthly_cap: string;
+            /** Today */
+            today: string;
+            /** Month */
+            month: string;
+            /**
+             * Day Resets At
+             * Format: date-time
+             */
+            day_resets_at: string;
+            /**
+             * Month Resets At
+             * Format: date-time
+             */
+            month_resets_at: string;
+            /** Blocked Reason */
+            blocked_reason: string | null;
         };
         /** ChatCitationOut */
         ChatCitationOut: {
@@ -395,6 +442,57 @@ export interface components {
              */
             latest_activity_at: string;
         };
+        /** CostSummary */
+        CostSummary: {
+            budget: components["schemas"]["BudgetOut"];
+            /** Pricing Source */
+            pricing_source: string;
+            /**
+             * Pricing Checked
+             * Format: date
+             */
+            pricing_checked: string;
+            all_time: components["schemas"]["Spend"];
+            /** Window Days */
+            window_days: number;
+            window: components["schemas"]["Spend"];
+            /** Per Job Average */
+            per_job_average: string | null;
+            /** Days */
+            days: components["schemas"]["DaySpend"][];
+            /** Models */
+            models: components["schemas"]["ModelSpend"][];
+            /** Stages */
+            stages: components["schemas"]["StageSpend"][];
+            /** Jobs */
+            jobs: components["schemas"]["JobSpend"][];
+            /** Unpriced Calls */
+            unpriced_calls: number;
+            /** Estimated Calls */
+            estimated_calls: number;
+            /** First Call At */
+            first_call_at: string | null;
+        };
+        /** DaySpend */
+        DaySpend: {
+            /** Billed */
+            billed: string;
+            /** List Price */
+            list_price: string;
+            /** Calls */
+            calls: number;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Cached Tokens */
+            cached_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+        };
         /** EvidenceOut */
         EvidenceOut: {
             /**
@@ -468,6 +566,37 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** JobSpend */
+        JobSpend: {
+            /** Billed */
+            billed: string;
+            /** List Price */
+            list_price: string;
+            /** Calls */
+            calls: number;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Cached Tokens */
+            cached_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Ticker */
+            ticker: string;
+            /** Company */
+            company: string;
+            /** Status */
+            status: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** KeyPointOut */
         KeyPointOut: {
             /** Text */
@@ -532,6 +661,27 @@ export interface components {
             strong: string;
             /** Embedding */
             embedding: string;
+        };
+        /** ModelSpend */
+        ModelSpend: {
+            /** Billed */
+            billed: string;
+            /** List Price */
+            list_price: string;
+            /** Calls */
+            calls: number;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Cached Tokens */
+            cached_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Model */
+            model: string;
+            /** Operation */
+            operation: string;
+            /** Priced */
+            priced: boolean;
         };
         /** PlannedQuestionOut */
         PlannedQuestionOut: {
@@ -834,6 +984,21 @@ export interface components {
             /** Assumptions */
             assumptions: components["schemas"]["Assumption"][];
         };
+        /** Spend */
+        Spend: {
+            /** Billed */
+            billed: string;
+            /** List Price */
+            list_price: string;
+            /** Calls */
+            calls: number;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Cached Tokens */
+            cached_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+        };
         /** StageRunResponse */
         StageRunResponse: {
             /** Stage */
@@ -860,6 +1025,25 @@ export interface components {
             /** Output Tokens */
             output_tokens: number | null;
         };
+        /** StageSpend */
+        StageSpend: {
+            /** Billed */
+            billed: string;
+            /** List Price */
+            list_price: string;
+            /** Calls */
+            calls: number;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Cached Tokens */
+            cached_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Source */
+            source: string;
+            /** Stage */
+            stage: string | null;
+        };
         /** StageTiming */
         StageTiming: {
             /** Stage */
@@ -884,6 +1068,11 @@ export interface components {
         };
         /** TraceTotals */
         TraceTotals: {
+            /**
+             * Cost Usd
+             * @default 0
+             */
+            cost_usd: string;
             /** Researchers */
             researchers: number;
             /** Tool Calls */
@@ -1398,6 +1587,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MetaResponse"];
+                };
+            };
+        };
+    };
+    get_costs_api_v1_costs_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CostSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
