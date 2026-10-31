@@ -29,6 +29,7 @@ export function money(value: string | number | null | undefined): string {
   if (n === null) return DASH;
   if (n === 0) return "$0.00";
   const abs = Math.abs(n);
+  if (abs < 0.0001) return `${n < 0 ? "-" : ""}<$0.0001`;
   const digits = abs >= 1 ? 2 : abs >= 0.01 ? 3 : 4;
   return `${n < 0 ? "-" : ""}$${abs.toFixed(digits)}`;
 }
