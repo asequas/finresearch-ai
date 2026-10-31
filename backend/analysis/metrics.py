@@ -311,6 +311,8 @@ def format_metric(value: Decimal, unit: str) -> str:
         return f"{value.quantize(Decimal('0.01'), rounding=ROUND_HALF_EVEN)}x"
     if unit == "USD":
         return format_usd(value)
+    if unit == "USD/share":
+        return f"${value.quantize(Decimal('0.01'), rounding=ROUND_HALF_EVEN):,}"
     return str(value)
 
 
