@@ -1,0 +1,63 @@
+# Production stack for one host (ADR 0013). Images come from GHCR; secrets come from .env next to this file.
+#   IMAGE_TAG=sha-abc123 docker compose up -d
+name: finresearch
+
+x-backend: &backend
+  image: ${REGISTRY:-ghcr.io/asequas/finresearch-ai}/backend:${IMAGE_TAG:-latest}
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+psycopg://finresearch:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/finresearch
+  volumes:
+    - app_data:/data
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: finresearch
+      POSTGRES_USER: finresearch
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finresearch -d finresearch"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Runs to completion before the API and worker start; a failed migration stops the deploy.
+  migrate:
+    <<: *backend
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  api:
+    <<: *backend
+    restart: unless-stopped
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  worker:
+    <<: *backend
+    command: ["python", "-m", "backend.worker.main"]
+    restart: unless-stopped
+    stop_grace_period: 70s  # SIGTERM releases the running job without spending an attempt (ADR 0001)
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  web:
+    image: ${REGISTRY:-ghcr.io/asequas/finresearch-ai}/web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-80}:80"
+    depends_on:
+      api: { condition: service_healthy }
+
+volumes:
+  postgres_data:
+  app_data:

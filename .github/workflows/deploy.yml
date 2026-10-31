@@ -1,0 +1,59 @@
+name: Deploy
+
+# Ships the images CI just tested and published on main to the server over SSH (ADR 0013).
+# Off until the repository variable DEPLOY_ENABLED is "true" and the production environment has
+# DEPLOY_HOST, DEPLOY_USER and DEPLOY_SSH_KEY secrets (and optionally DEPLOY_PATH).
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to deploy, e.g. sha-0123456789ab (rollback)"
+        required: true
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    if: >-
+      vars.DEPLOY_ENABLED == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'))
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      TAG: ${{ inputs.tag || format('sha-{0}', github.event.workflow_run.head_sha) }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || 'finresearch' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Image tag
+        run: echo "TAG=${TAG::16}" >> "$GITHUB_ENV"  # sha- plus the first 12 hex characters, as CI tags it
+      - name: SSH key
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+      - name: Copy the stack definition
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "mkdir -p $DEPLOY_PATH"
+          scp -i ~/.ssh/id_deploy deploy/docker-compose.yml deploy/deploy.sh deploy/smoke.sh \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:$DEPLOY_PATH/"
+      - name: Let the server pull the images
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "docker login ghcr.io -u '${{ github.actor }}' --password-stdin >/dev/null"
+      - name: Deploy (migrate, restart, smoke test, roll back on failure)
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "cd $DEPLOY_PATH && test -f .env && ./deploy.sh '$TAG'"
