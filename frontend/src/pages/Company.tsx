@@ -81,7 +81,7 @@ export function CompanyPage() {
           ))}
           {detail.latest_valuation && (
             <div>
-              <dt className="text-small text-muted">DCF value per share</dt>
+              <dt className="text-small text-muted">Fair value per share</dt>
               <dd>
                 <Link to={`/reports/${detail.latest_valuation.job_id}#valuation`} className="num hover:underline">
                   {money(detail.latest_valuation.value_per_share)}

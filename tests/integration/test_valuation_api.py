@@ -78,6 +78,13 @@ def test_a_typed_price_overrides_the_quote_and_changes_no_assumption(valued_job,
     assert body["what_if"] is False and body["overridden"] == []
 
 
+def test_the_price_check_compares_with_the_record_not_a_what_if_growth(valued_job):
+    body = TestClient(app).post(f"/api/v1/research/{valued_job.id}/valuation/what-if",
+                                json={"initial_growth": "0.3", "market_price": "1500"}).json()
+
+    assert "the revenue record suggests 10.0%" in body["price_check"]["explanation"]
+
+
 def test_what_if_recomputes_from_stored_inputs_and_saves_nothing(valued_job):
     client = TestClient(app)
     base = client.get(f"/api/v1/research/{valued_job.id}/valuation").json()

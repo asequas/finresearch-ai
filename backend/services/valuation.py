@@ -71,7 +71,7 @@ def to_out(job_id: UUID, valuation: Valuation, result: dict | None = None, *, ov
     )
 
 
-def price_check(inputs: FairValueInputs, out: ValuationOut, price: Decimal) -> PriceCheckOut:
+def price_check(inputs: FairValueInputs, out: ValuationOut, price: Decimal, record_growth: Decimal) -> PriceCheckOut:
     low, high, fair = out.range_low, out.range_high, out.fair_value
     position = "below_range" if price < low else "above_range" if price > high else "within_range"
     gap = fair / price - 1
@@ -84,7 +84,7 @@ def price_check(inputs: FairValueInputs, out: ValuationOut, price: Decimal) -> P
         lead = "The price is within the fair-value range: on these assumptions the shares look roughly fairly valued."
     if implied is not None:
         tail = (f" To justify this price, free cash flow would need to grow about {implied:.1%} a year for "
-                f"{inputs.high_growth_years} years (the record suggests {inputs.initial_growth:.1%}).")
+                f"{inputs.high_growth_years} years (the revenue record suggests {record_growth:.1%}).")
     elif "dcf" in out.methods_used:
         tail = " No growth rate between 0% and 60% makes the cash-flow DCF match this price."
     else:
@@ -106,7 +106,8 @@ class ValuationService:
             raise NotFoundError("This job has no valuation yet")
         return job, valuation
 
-    def _with_price(self, out: ValuationOut, inputs: FairValueInputs | None, ticker: str, typed: Decimal | None) -> ValuationOut:
+    def _with_price(self, out: ValuationOut, inputs: FairValueInputs | None, ticker: str, typed: Decimal | None,
+                    record_growth: Decimal | None = None) -> ValuationOut:
         if out.status != "valued" or inputs is None:
             return out
         if typed is not None:
@@ -116,7 +117,8 @@ class ValuationService:
             if quote is not None:
                 out.market_price = MarketPriceOut(price=quote.price, as_of=quote.as_of, source=quote.source)
         if out.market_price is not None:
-            out.price_check = price_check(inputs, out, out.market_price.price)
+            growth = record_growth if record_growth is not None else inputs.initial_growth
+            out.price_check = price_check(inputs, out, out.market_price.price, growth)
         return out
 
     def get(self, session: Session, *, job_id: UUID, user_id: UUID) -> ValuationOut:
@@ -132,9 +134,10 @@ class ValuationService:
             raise BadRequestError(f"There is no valuation to vary: {valuation.skip_reason}")
         overrides = request.model_dump(exclude_none=True)
         typed = overrides.pop("market_price", None)
-        inputs = apply_overrides(FairValueInputs.from_json(valuation.inputs), overrides)
+        stored = FairValueInputs.from_json(valuation.inputs)
+        inputs = apply_overrides(stored, overrides)
         try:
             out = to_out(job_id, valuation, value(inputs), overridden=sorted(overrides)) if overrides else to_out(job_id, valuation)
-            return self._with_price(out, inputs, job.ticker, typed)
+            return self._with_price(out, inputs, job.ticker, typed, stored.initial_growth)
         except (InvalidAssumptions, ValuationSkipped) as exc:
             raise BadRequestError(str(exc)) from exc
