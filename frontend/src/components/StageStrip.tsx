@@ -19,8 +19,9 @@ export function stageStates(job: Job, runs: Run[] = []): Record<Stage, StageStat
 
   const states = {} as Record<Stage, StageState>;
   for (const { key } of STAGES) {
-    if (job.status === "completed" || done.has(key)) states[key] = "done";
-    else if (job.status === "running" && job.current_stage === key) states[key] = "running";
+    // Running wins over done: researchers run in parallel, and a revision round revisits a finished stage.
+    if (job.status === "running" && job.current_stage === key) states[key] = "running";
+    else if (job.status === "completed" || done.has(key)) states[key] = "done";
     else if (latestByStage.get(key)?.status === "failed") states[key] = "failed";
     else states[key] = "pending";
   }
@@ -35,7 +36,7 @@ const FILL: Record<StageState, string> = {
 };
 
 /**
- * The product's signature: eight segments, one per pipeline stage. Completed stages are ink,
+ * The product's signature: one segment per pipeline stage. Completed stages are ink,
  * the running stage carries the one accent, a failed stage the negative colour.
  */
 export function StageStrip({ job, runs, compact = false }: { job: Job; runs?: Run[]; compact?: boolean }) {
@@ -44,8 +45,8 @@ export function StageStrip({ job, runs, compact = false }: { job: Job; runs?: Ru
   const doneCount = STAGES.filter((s) => states[s.key] === "done").length;
   const label =
     job.status === "completed"
-      ? "All 8 stages complete"
-      : `${doneCount} of 8 stages complete${current ? `, ${states[current.key] === "failed" ? "failed at" : "now"} ${current.label.toLowerCase()}` : ""}`;
+      ? `All ${STAGES.length} stages complete`
+      : `${doneCount} of ${STAGES.length} stages complete${current ? `, ${states[current.key] === "failed" ? "failed at" : "now"} ${current.label.toLowerCase()}` : ""}`;
 
   return (
     <div role="img" aria-label={label} className="flex w-full gap-[3px]">

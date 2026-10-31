@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { ApiError, isActive, useJob, useJobAction, useMeta } from "../api/client";
+import { AgentActivity } from "../components/AgentActivity";
 import { CheckIcon, CrossIcon } from "../components/icons";
 import { StageStrip, stageStates } from "../components/StageStrip";
 import { Bar, Button, ButtonLink, ErrorBlock, Kv, Notice, PageTitle, Panel, StatusPill } from "../components/ui";
@@ -28,6 +29,11 @@ export function JobPage() {
   const retry = useJobAction("retry");
   const live = !!job.data && isActive(job.data.status);
   useNow(live);
+  // The report links to "#agent"; the panel only exists once the job has loaded.
+  const loaded = !!job.data;
+  useEffect(() => {
+    if (loaded && window.location.hash) document.getElementById(window.location.hash.slice(1))?.scrollIntoView();
+  }, [loaded]);
 
   if (job.isError) {
     const missing = job.error instanceof ApiError && job.error.status === 404;
@@ -48,7 +54,8 @@ export function JobPage() {
   useTitle(data ? `${data.ticker} research` : "Research job");
   const typical = new Map((meta.data?.stage_timings ?? []).map((t) => [t.stage, t.median_ms]));
   const typicalTotal = STAGES.reduce((sum, s) => sum + (typical.get(s.key) ?? 0), 0);
-  const completedStages = (data?.stages ?? []).filter((r) => r.status === "completed").length;
+  const completedStages = STAGES.filter((s) => states?.[s.key] === "done").length;
+  const researchRuns = (data?.stages ?? []).filter((r) => r.stage === "researching");
   const remainingMs = data ? STAGES.filter((s) => states?.[s.key] !== "done").reduce((sum, s) => sum + (typical.get(s.key) ?? 0), 0) : 0;
   const retryIn = data?.status === "queued" && data.attempts > 0 ? Math.max(0, new Date(data.run_after).getTime() - Date.now()) : 0;
 
@@ -56,7 +63,7 @@ export function JobPage() {
     : data.status === "completed" ? `Completed in ${elapsed(data.started_at, data.completed_at)}. The report is ready.`
     : data.status === "failed" ? data.error_message
     : data.status === "cancelled" ? (completedStages > 0
-        ? `Cancelled after ${completedStages} of 8 stages. Those stages are kept, so a retry resumes where it stopped.`
+        ? `Cancelled after ${completedStages} of ${STAGES.length} stages. Those stages are kept, so a retry resumes where it stopped.`
         : "Cancelled before any work started. Retry to queue it again.")
     : data.status === "queued" && data.attempts > 0
       ? `${retryIn > 0 ? `Retrying in ${duration(retryIn)}` : "Retrying now"} (attempt ${data.attempts + 1} of ${data.max_attempts}). ${data.error_message ?? ""}`
@@ -97,6 +104,7 @@ export function JobPage() {
       )}
 
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid min-w-0 grid-cols-1 gap-6">
         <Panel id="stages" title="Stages" aside={data && <StatusPill status={data.status} />}>
           <div className="px-6 pb-2">
             {data ? <StageStrip job={data} runs={data.stages} /> : <Bar w="100%" h={6} />}
@@ -128,6 +136,7 @@ export function JobPage() {
                     {state === "running" && run ? elapsed(run.started_at)
                       : run?.duration_ms != null ? duration(run.duration_ms)
                       : typical.get(stage.key) ? <span title="Typical duration">~{duration(typical.get(stage.key)!)}</span> : "—"}
+                    {stage.key === "researching" && researchRuns.length > 1 && <span className="block">{researchRuns.length} agents</span>}
                     {run && run.attempt > 1 && <span className="block">attempt {run.attempt}</span>}
                     {run?.input_tokens != null && <span className="block">{(run.input_tokens + (run.output_tokens ?? 0)).toLocaleString()} tok</span>}
                   </span>
@@ -139,6 +148,8 @@ export function JobPage() {
             {data?.status === "running" ? `Now ${STAGES.find((s) => s.key === data.current_stage)?.label ?? ""}` : data?.status}
           </p>
         </Panel>
+        {data && <AgentActivity jobId={data.id} live={isActive(data.status)} />}
+        </div>
 
         <div className="grid grid-cols-1 gap-6">
         <Panel id="request" title="Request">
