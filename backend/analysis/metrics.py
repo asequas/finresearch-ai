@@ -33,6 +33,13 @@ class FinancialPeriod:
     stockholders_equity: Decimal | None = None
     debt: Decimal | None = None
     eps: Decimal | None = None
+    # DCF inputs (ADR 0010); not used by the ratio metrics.
+    depreciation_amortization: Decimal | None = None
+    income_tax_expense: Decimal | None = None
+    pretax_income: Decimal | None = None
+    short_term_investments: Decimal | None = None
+    lease_liabilities: Decimal | None = None
+    minority_interest: Decimal | None = None
 
     @property
     def period(self) -> str:
