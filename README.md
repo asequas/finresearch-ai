@@ -23,7 +23,7 @@ https://github.com/user-attachments/assets/052b5d0a-8247-49fb-98fd-71ef3b0956cc
 
 | | Result | Evidence |
 | --- | --- | --- |
-| **Trustworthy output** | Microsoft report: 15 of 16 claims supported, 100% of quotes verbatim in the filing, 100% of numbers match code-computed metrics. NVIDIA: the agent's critic sent a failed claim back and all 16 ended up supported | [`docs/STATUS.md`](docs/STATUS.md), `python -m backend.evals.citations auto <job>` |
+| **Trustworthy output** | Fresh run on Alphabet: 15 claims, 14 supported, 1 partly, 0 unsupported; 100% of quotes verbatim in the filing and 100% of numbers matching code-computed metrics, in ~3 minutes for $0.08. NVIDIA: the agent's critic sent a failed claim back and all 16 ended up supported | [`docs/STATUS.md`](docs/STATUS.md), `python -m backend.evals.citations auto <job>` |
 | **Better retrieval, measured** | Recall@1 0.567 → **0.733** and MRR 0.706 → **0.811** on a 30-question gold set over real filings, after tuning hybrid search and adding a local cross-encoder | [ADR 0007](docs/adr/0007-retrieval-tuning-and-reranking.md), `python -m backend.evals.retrieval` |
 | **Survives failure** | A worker killed with `kill -9` mid-job is recovered by another; the Microsoft run rode out three provider outages by resuming from its Postgres checkpoint without redoing finished work | `tests/integration/test_worker.py`, [ADR 0001](docs/adr/0001-postgres-backed-job-queue.md) |
 | **Cheap to run** | **~$0.04–0.11 of model spend per report**, every call priced in a ledger with hard daily and monthly caps; CI/CD on free runners; a ₹0 hosting plan | [ADR 0009](docs/adr/0009-llm-cost-controls-and-ledger.md), [Cost engineering](#cost-engineering) |

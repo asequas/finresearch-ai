@@ -1,6 +1,6 @@
 # FinResearch AI: Status
 
-Last updated: 2026-11-01 (recruiter README and demo video).
+Last updated: 2026-11-01 (live end-to-end test on Alphabet).
 Labels: **verified** = demonstrated by a test or a command this session; **unverified** = built, not yet demonstrated
 against real external services; **proposed** = not built.
 
@@ -11,6 +11,7 @@ against real external services; **proposed** = not built.
 | Test suite: 233 tests (plus 1 opt-in model test) on an isolated `finresearch_test` database | `python -m pytest`; `-m model` for the real reranker |
 | Research agent (ADR 0008): LangGraph plan → parallel tool-using researchers (`Send`) → draft → verify → code critic → bounded revision → synthesize; Postgres checkpointer inside the durable queue. Tested: fan-out and merge, revision loop bounded, a worse revision restored, resume after a 429 without re-running finished researchers, cancel mid-research, tool-less answers discarded, invented handles dropped | `tests/integration/test_research_agent.py`, `test_agent_tools.py` |
 | Agent on live data: MSFT completed through three Gemini 503 attempts, resuming the graph each time (finished researchers not repeated); the revision verified worse and the critic restored the better draft. Final: 15/16 supported, 100% quotes verbatim, 100% numbers match | `python -m backend.evals.citations auto 167fb858-…`; `/research/{id}/trace` |
+| Live end-to-end test after the fair-value, packaging and report changes (2026-11-01, paid tier): a never-seen company, GOOGL, completed on attempt 1 in ~3 min with one fact-check revision round. 15 claims: 14 supported, 1 partly, 0 unsupported; citation coverage, verbatim quotes and numeric consistency all 100%. The report cites the fair value ($99.14), DCF ($110.07) and EPV ($88.20) metrics, each verified to the cent, with no price claims. Cost $0.0802 over 51 model calls | `python -m backend.evals.citations auto 48907833-…`; `/research/48907833-…/trace` |
 | Agent self-correction on live data: NVDA's critic sent one unsupported claim and one empty-handed question back; after the revision all 16 claims were supported (100% quotes, 100% numbers), in 4 min 47 s | `/research/cb8b23ad-…/trace` |
 | Ask the analyst: tool-using follow-up agent; citations checked against the filing (live: 2 of 2 quotes verified on MSFT); 429 at the turn cap, 503 with Retry-After when the provider is busy, question + answer committed together | `tests/integration/test_analyst_chat.py`, playwright-cli session |
 | Fair-value blend (ADR 0012; supersedes the Damodaran FCFF model of ADRs 0010-0011): cash-flow DCF on reported FCF after stock compensation + earnings power value, range where they land, reverse DCF against the price; stock-based compensation added from XBRL (revision `3bc1c688ca22`); all six companies revalued with zero LLM calls (`llm_calls` 111 before and after) | `tests/unit/test_fair_value.py` (hand-worked case), `test_fair_value_defaults.py`, `tests/integration/test_valuation_*.py`, `python -m backend.valuation.backfill --revalue` |
