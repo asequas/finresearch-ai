@@ -129,7 +129,11 @@ def evaluate(gold_path: Path, *, k: int, embed, reranker: Reranker, rerank_candi
 def main(argv: list[str]) -> int:
     from backend.llm.client import get_llm_client
 
-    gold = Path(next((a for a in argv if not a.startswith("--")), DEFAULT_GOLD))
+    if "--live" not in argv:
+        print("This eval embeds every gold query with Gemini (a billed call on a paid project). "
+              "Re-run with --live to confirm.")
+        return 2
+    gold = Path(next((a for a in argv if not a.startswith("--") and not a.isdigit()), DEFAULT_GOLD))
     k = int(argv[argv.index("--k") + 1]) if "--k" in argv else 6
     client = get_llm_client()
     rows = evaluate(gold, k=k, embed=lambda texts: client.embed(texts, task="query"), reranker=get_reranker())
