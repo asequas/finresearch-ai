@@ -95,6 +95,20 @@ Rules that keep the ledger accurate:
 - How the numbers are calculated, with counts of estimated and unpriced rows.
 - The job page's agent panel shows that job's cost.
 
+## Measured after the change (live COST job, free tier, 2026-10-31)
+
+| | NVDA (before) | MSFT (before) | COST (after) |
+| --- | --- | --- | --- |
+| Attempts / wall time | 2 / 4 min 47 s | 3 / 11 min | **1 / 3 min 34 s** |
+| 429 + 5xx responses during the job | many | 19 + 12 | **2** (the first strong call; later calls skipped the cooling models) |
+| Researchers / tool calls | 7 / 25 | 6 / 16 | 6 / 24 |
+| Researcher input per tool call | ~7.2k tokens | ~5.4k | **~4.4k** (of which 17% served from Gemini's implicit cache) |
+| Job cost at list price (ledger) | ~$0.087 | ~$0.056 | **$0.058** (49 calls, 133k in / 9k out) |
+| Quotes verbatim / numbers match | 100% / 100% | 100% / 100% | 100% / 100% (16 of 17 claims supported) |
+
+These are different companies and questions, so the comparison is indicative rather than a controlled A/B. The
+cool-down effect is direct: two rejected requests instead of one per strong call.
+
 ## Alternatives
 
 | Option | Why not |
