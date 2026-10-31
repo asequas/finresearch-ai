@@ -1,8 +1,9 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 
 import { type ChatCitation, type ChatMessage, useAskAnalyst, useChat } from "../api/client";
-import { SECTION_LABEL, date } from "../lib/format";
+import { date } from "../lib/format";
 import { ToolCallRow } from "./AgentActivity";
+import { SOURCE_SECTION } from "./Inspector";
 import { CloseIcon, ExternalIcon } from "./icons";
 import { Bar, Button, ErrorBlock, Pill } from "./ui";
 
@@ -22,7 +23,7 @@ function Citation({ citation, number }: { citation: ChatCitation; number: number
           <figcaption className="mt-2 flex flex-wrap items-center justify-between gap-2 text-small text-muted">
             <span>
               {citation.form ?? "Filing"}{citation.period ? <>, period ended <span className="num">{date(citation.period)}</span></> : null}
-              {citation.section ? `, ${SECTION_LABEL[citation.section] ?? citation.section}` : ""}
+              {citation.section ? `, ${SOURCE_SECTION[citation.section] ?? citation.section}` : ""}
             </span>
             {citation.url && (
               <a href={citation.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline">

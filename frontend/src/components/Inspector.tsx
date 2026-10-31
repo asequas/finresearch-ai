@@ -16,7 +16,7 @@ const TYPE_EXPLAINER: Record<string, string> = {
   interpretation: "Analytical judgement drawn from the cited passages and metrics. Read it as opinion, not fact.",
 };
 
-const SOURCE_SECTION: Record<string, string> = {
+export const SOURCE_SECTION: Record<string, string> = {
   business: "Item 1. Business",
   risk_factors: "Item 1A. Risk Factors",
   mdna: "Management's Discussion and Analysis",
