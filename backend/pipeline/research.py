@@ -766,10 +766,6 @@ def build_limitations(session: Session, job_id: UUID) -> list[str]:
         )
     elif valuation is not None:
         limitations.append(f"No fair value: {valuation.skip_reason}")
-    limitations.append(
-        "The written report uses no market price data, so it makes no price, return or market-multiple claims; the "
-        "valuation view compares the fair value with a delayed quote (or a price you enter) when you open it."
-    )
     unsupported = session.scalar(
         select(Claim.id).where(Claim.research_job_id == job_id, Claim.verification_status == "unsupported").limit(1)
     )

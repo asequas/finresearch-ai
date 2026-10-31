@@ -1,19 +1,85 @@
 # FinResearch AI
 
 [![CI](https://github.com/asequas/finresearch-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/asequas/finresearch-ai/actions/workflows/ci.yml)
+![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-agents-1C3C3C)
+![PostgreSQL 17 + pgvector](https://img.shields.io/badge/PostgreSQL_17-pgvector-4169E1?logo=postgresql&logoColor=white)
+![React + TypeScript](https://img.shields.io/badge/React_19-TypeScript-3178C6?logo=typescript&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-amd64_%7C_arm64-2496ED?logo=docker&logoColor=white)
 
-Evidence-backed research on US-listed companies, done by a team of agents. Ask a question about a ticker: a planner
-splits it into sub-questions, researcher agents search the company's SEC filings and code-computed financials in
-parallel, a fact-checker verifies every claim and sends material failures back for another look, and the report
-lets any statement open to the passage, figure or formula behind it. Then ask the analyst follow-up questions; its
-citations are checked too.
+**An evidence-backed research analyst for US-listed companies.** Ask a question about a ticker. A team of LangGraph
+agents researches the company's SEC filings in parallel, code computes every number, a fact-checker verifies every
+claim, and the report lets you open any statement to the exact filing passage, figure or formula behind it.
 
-It's decision support, not a stock picker: unsupported claims are flagged, limitations are listed, and nothing
-recommends buying or selling.
+![FinResearch demo: claim evidence, a code-computed metric, fair value, the agent trace and the cost ledger](docs/demo/demo.gif)
 
-## Tour
+**▶ [Watch the full 2-minute walkthrough](docs/demo/finresearch-demo.mp4)** (MP4, recorded on the real app with real
+reports on Microsoft's 10-K; no live model calls during the recording).
 
-Real research on Amazon, Microsoft and NVIDIA filings, run end to end through the app.
+## At a glance
+
+| | Result | Evidence |
+| --- | --- | --- |
+| **Trustworthy output** | Microsoft report: 15 of 16 claims supported, 100% of quotes verbatim in the filing, 100% of numbers match code-computed metrics. NVIDIA: the agent's critic sent a failed claim back and all 16 ended up supported | [`docs/STATUS.md`](docs/STATUS.md), `python -m backend.evals.citations auto <job>` |
+| **Better retrieval, measured** | Recall@1 0.567 → **0.733** and MRR 0.706 → **0.811** on a 30-question gold set over real filings, after tuning hybrid search and adding a local cross-encoder | [ADR 0007](docs/adr/0007-retrieval-tuning-and-reranking.md), `python -m backend.evals.retrieval` |
+| **Survives failure** | A worker killed with `kill -9` mid-job is recovered by another; the Microsoft run rode out three provider outages by resuming from its Postgres checkpoint without redoing finished work | `tests/integration/test_worker.py`, [ADR 0001](docs/adr/0001-postgres-backed-job-queue.md) |
+| **Cheap to run** | **~$0.04–0.11 of model spend per report**, every call priced in a ledger with hard daily and monthly caps; CI/CD on free runners; a ₹0 hosting plan | [ADR 0009](docs/adr/0009-llm-cost-controls-and-ledger.md), [Cost engineering](#cost-engineering) |
+| **Tested and shipped like production** | 233 tests on a real Postgres; CI builds x86 and ARM images, boots the whole stack and runs a research job through it before anything is published | [`.github/workflows/ci.yml`](.github/workflows/ci.yml), [ADR 0013](docs/adr/0013-ci-cd-and-single-host-deploy.md) |
+| **Decisions written down** | 13 architecture decision records, each with alternatives, failure modes and when to revisit | [`docs/adr/`](docs/adr) |
+
+## Skills demonstrated
+
+| Area | What's in this repo | Where |
+| --- | --- | --- |
+| Backend and API design | FastAPI + Pydantic; `202 Accepted` + `Location` + `Idempotency-Key` (8 concurrent duplicates → 1 job); cursor pagination; ownership-scoped reads; a strict router → service → repository layering where only services own transactions | [`backend/api`](backend/api), [`backend/services`](backend/services), [ADR 0003](docs/adr/0003-submission-contract-and-idempotency.md) |
+| Distributed systems | A durable job queue on Postgres: `FOR UPDATE SKIP LOCKED` claims, leases with heartbeats, fencing tokens against zombie workers, retries with backoff, a reaper, cancellation, resume from the last completed stage | [`backend/worker`](backend/worker), [ADR 0001](docs/adr/0001-postgres-backed-job-queue.md), [ADR 0002](docs/adr/0002-job-state-machine.md) |
+| Agentic AI | LangGraph `StateGraph` with `Send` fan-out to parallel tool-using researchers, reducers, a code-routed critic with one bounded revision, a guard that restores the better draft, and a Postgres checkpointer inside the queue's lease | [`backend/agent`](backend/agent), [ADR 0008](docs/adr/0008-langgraph-research-agent.md) |
+| RAG and evaluation | Section-aware chunking; `tsvector` + HNSW `vector(768)` hybrid search fused with reciprocal rank fusion; a local MiniLM cross-encoder; a labelled gold set with recall, MRR and nDCG | [`backend/analysis`](backend/analysis), [`backend/evals`](backend/evals), [ADR 0007](docs/adr/0007-retrieval-tuning-and-reranking.md) |
+| Hallucination control | Every claim typed as fact, calculation or interpretation; quotes matched verbatim in code, numbers matched against computed metrics, then an LLM fact-check; unsupported claims stay visible and out of the summary | [ADR 0005](docs/adr/0005-evidence-and-provenance-model.md), [ADR 0006](docs/adr/0006-research-pipeline-retrieval-and-llm.md) |
+| Data and financial engineering | SEC EDGAR client with fair-access rate limiting and caching; XBRL extraction with provenance (concept, accession, period, filed date); `Decimal` metrics with unit-tested formulas; a cash-flow DCF, earnings power value and reverse DCF with a CAPM cost of capital | [`backend/sources`](backend/sources), [`backend/analysis/metrics.py`](backend/analysis/metrics.py), [`backend/valuation`](backend/valuation), [ADR 0012](docs/adr/0012-fair-value-blend-and-delayed-price.md) |
+| Databases | PostgreSQL 17 schema with constraints doing real work (unique idempotency keys, check constraints, cascades); Alembic migrations round-tripped and drift-checked in CI | [`database/migrations`](database/migrations), [ADR 0004](docs/adr/0004-enum-storage.md) |
+| Frontend | React 19 + TypeScript, TanStack Query, a client typed from FastAPI's OpenAPI schema (`npm run api:check` fails on drift); live job progress, claim inspector, what-if valuation; keyboard-navigable, responsive, with designed loading, empty, error and partial states | [`frontend/`](frontend), [`frontend/DESIGN.md`](frontend/DESIGN.md) |
+| Testing | 233 tests: ten threads racing for one job, a real `kill -9` of a worker, SIGTERM release, the full pipeline against a fake SEC and a scripted tool-calling model; no test can reach a paid API | [`tests/`](tests) |
+| DevOps | Multi-stage Docker images, nginx, Compose; a GitHub Actions matrix on native amd64 and arm64 runners; GHCR; an SSH deploy that migrates, smoke-tests and rolls back automatically | [`.github/workflows`](.github/workflows), [`deploy/`](deploy), [ADR 0013](docs/adr/0013-ci-cd-and-single-host-deploy.md) |
+| Observability | A trace of every agent and tool call rendered live on the job page; a priced row per model call; stage timings per job | [`backend/costs`](backend/costs), [ADR 0009](docs/adr/0009-llm-cost-controls-and-ledger.md) |
+
+## Why it's production grade
+
+- **No lost or duplicated work.** Submitting a job and enqueueing it is one Postgres transaction, so there's no dual
+  write to a broker. Delivery is at-least-once; exactly-once *effects* come from fencing tokens, idempotent stage
+  writes and unique constraints. HTTP retries with the same `Idempotency-Key` return the same job.
+- **Crashes are routine, not incidents.** Leases expire and another worker takes over; SIGTERM releases a job without
+  burning a retry; a retried job resumes at the LangGraph node that failed. All of it is tested with real processes.
+- **Correctness before cleverness.** The model never does arithmetic. Deterministic work (fetching filings, parsing
+  XBRL, metrics, valuation) is plain tested code; LLMs are used only for planning, research, drafting and judging.
+- **Failures are visible.** Missing data, skipped metrics, unsupported claims and the report's limitations are shown,
+  not hidden. Financial-sector companies are rejected up front with a reason.
+- **Safe delivery.** Every change runs the tests, a migration drift check and a full-stack smoke test on
+  both CPU architectures. Deploys migrate before traffic and roll back on a failed health check.
+- **Guard rails on spend.** Daily and monthly caps refuse new work with a clear 429 once spent; running jobs stop at a
+  resumable point instead of failing.
+
+## Cost engineering
+
+Cost was a design constraint from the start: free or local where quality allows, paid only where it earns its keep,
+and every cent measured.
+
+| Decision | Effect |
+| --- | --- |
+| Deterministic code for everything that doesn't need judgement (ingestion, metrics, valuation, quote and number checks) | Most of the pipeline makes no model calls at all |
+| Cheap model for routine steps, a stronger one only for synthesis and judging; fallbacks limited to priced models | Spend goes where reasoning quality matters |
+| Old tool results compacted to citable headers before each researcher call | Input per tool call 7.2k → 4.4k tokens; job cost $0.087 → $0.058 |
+| A 429 puts that model in cool-down for the provider's suggested delay | Later calls skip it instead of being rejected again |
+| Resume from the LangGraph checkpoint after a failure | Finished researchers are never re-run, so retries don't double the bill |
+| Local cross-encoder reranker (ONNX, on CPU) | Better retrieval with no per-query API cost |
+| On-disk caches: SEC filings (immutable), Treasury yield (daily), delayed quotes (15 min) | Re-runs and re-reads are free |
+| A per-call cost ledger at dated list prices, with $1/day and $5/month caps | ~$0.04–0.11 per report, and spend can't run away |
+| Tests can't reach the paid API (blocked at the client) | CI and local runs cost nothing |
+| Postgres as the queue, vector store and checkpointer | One stateful service instead of Postgres + Redis + a vector DB |
+| GitHub Actions and GHCR on a public repo; a single Docker host (Oracle Cloud's free Arm VM fits) | CI/CD and a hosting plan at ₹0 |
+
+## Product tour
 
 | | |
 | --- | --- |
@@ -27,23 +93,6 @@ Real research on Amazon, Microsoft and NVIDIA filings, run end to end through th
 | **Company workspace.** Five years of reported figures and every report on the company. | **Phone.** The same report, laid out for a small screen. |
 | ![Costs](docs/screenshots/costs.png) | ![Valuation](docs/screenshots/valuation.png) |
 | **Costs.** Every model call priced from its token counts, against daily and monthly caps; by day, model, stage and job. | **Valuation.** Fair value from a cash-flow DCF and earnings power, every assumption sourced; the delayed price is placed against the range, with the growth it implies. |
-
-## What makes it trustworthy
-
-- **Facts, calculations and interpretations are kept apart.** Facts must quote the filing verbatim; calculations
-  come from code (`Decimal`, unit-tested formulas) and show their inputs; interpretations are labelled as opinion.
-- **The model never does arithmetic.** It cites metric ids; the verifier checks every number in a claim against
-  the computed metric.
-- **Every quote is checked literally** against the stored filing text before a fact-checking model judges the rest.
-- **Every reported figure carries provenance**: XBRL concept, filing accession, filed date and period.
-- **Failures are visible.** Missing data, skipped metrics and unsupported claims appear in the report.
-- **Fair value is computed, not generated.** Two simple methods built from reported numbers (a cash-flow DCF and
-  earnings power value) give a fair value and a range; every assumption is sourced, dated and editable. A free
-  delayed quote (or a price you type) is placed against that range, and a reverse DCF states the growth the price
-  requires next to the company's actual record.
-- **Spend is measured and capped.** Every model call is a priced row in a cost ledger (input, cached, output and
-  thinking tokens at Google's dated list prices); daily and monthly caps stop new work, and the Costs tab shows
-  where the money goes. A research job costs about $0.04–0.11 at paid-tier prices.
 
 ## Architecture
 

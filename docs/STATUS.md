@@ -1,6 +1,6 @@
 # FinResearch AI: Status
 
-Last updated: 2026-11-01 (after CI/CD, ADR 0013).
+Last updated: 2026-11-01 (recruiter README and demo video).
 Labels: **verified** = demonstrated by a test or a command this session; **unverified** = built, not yet demonstrated
 against real external services; **proposed** = not built.
 
@@ -15,6 +15,7 @@ against real external services; **proposed** = not built.
 | Ask the analyst: tool-using follow-up agent; citations checked against the filing (live: 2 of 2 quotes verified on MSFT); 429 at the turn cap, 503 with Retry-After when the provider is busy, question + answer committed together | `tests/integration/test_analyst_chat.py`, playwright-cli session |
 | Fair-value blend (ADR 0012; supersedes the Damodaran FCFF model of ADRs 0010-0011): cash-flow DCF on reported FCF after stock compensation + earnings power value, range where they land, reverse DCF against the price; stock-based compensation added from XBRL (revision `3bc1c688ca22`); all six companies revalued with zero LLM calls (`llm_calls` 111 before and after) | `tests/unit/test_fair_value.py` (hand-worked case), `test_fair_value_defaults.py`, `tests/integration/test_valuation_*.py`, `python -m backend.valuation.backfill --revalue` |
 | Delayed price: Cboe quote with no key, cached 15 min, labelled personal/demo; a typed price overrides it; failure degrades to "enter a price"; injected in tests (`PRICE_SOURCE=none`) | `tests/unit/test_valuation_price.py`, `test_valuation_api.py::test_the_delayed_quote…`, playwright at 1440/390 with zero console errors |
+| Demo video and README for reviewers: a 2:15 walkthrough recorded from the real app (`docs/demo/finresearch-demo.mp4`) and a highlight GIF; stored report limitations refreshed from code (no model calls; `llm_calls` 111 before and after) | `docs/demo/`, README |
 | Cost ledger (ADR 0009): every Gemini response is a priced row (input/cached/output/thinking tokens, dated list price in Decimal, billed vs free tier), attributed to job and stage even inside LangGraph's parallel researcher threads; embeddings counted with countTokens | `tests/integration/test_costs.py`, `tests/unit/test_pricing.py`, `test_research_agent.py::test_every_model_call_lands_in_the_cost_ledger…` |
 | Spend caps: $1/day and $5/month on billed calls; new research and chat refused with 429 and the reset time; running jobs stop resumably; free tier never blocks | `tests/integration/test_costs.py` |
 | Fewer wasted calls and tokens: a 429 puts the model in cool-down so later calls skip it; old researcher tool results compacted to citable headers; fallback chain limited to priced models | `tests/unit/test_llm_fallback.py`, `tests/unit/test_agent_cost_controls.py` |
