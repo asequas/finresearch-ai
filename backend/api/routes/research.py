@@ -16,7 +16,9 @@ from backend.schemas.research import (
     ResearchJobListResponse,
     ResearchJobResponse,
 )
+from backend.schemas.agent import AgentTraceResponse
 from backend.schemas.report import CompanyDetail, CompanySummary, ReportResponse
+from backend.services.agent_trace import AgentTraceService
 from backend.services.report import ReportService
 from backend.services.research_job import ResearchJobService
 
@@ -128,6 +130,20 @@ def get_research_report(
     current_user: User = Depends(get_current_user),
 ):
     return ReportService().get_report(db, job_id=job_id, user_id=current_user.id)
+
+
+@router.get(
+    "/{job_id}/trace",
+    response_model=AgentTraceResponse,
+    responses={404: {"description": "Research job not found"}},
+)
+def get_research_trace(
+    job_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """What the research agent did: its plan, each researcher's tool calls, and the critic's decisions."""
+    return AgentTraceService().get_trace(db, job_id=job_id, user_id=current_user.id)
 
 
 companies_router = APIRouter(prefix="/api/v1/companies", tags=["companies"])

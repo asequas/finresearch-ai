@@ -1,5 +1,6 @@
 """The LangGraph research agent inside the durable queue: routing, bounds, resume and cancellation."""
 from datetime import datetime, timezone
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import func, select, text, update
@@ -132,3 +133,29 @@ def test_linear_pipeline_is_still_available_as_a_baseline(make_job, tmp_path, pi
     with SessionLocal() as session:
         assert session.get(ResearchJob, job.id).status == ResearchJobStatus.COMPLETED
     assert _runs(job.id, "analyzing") and not _runs(job.id, "planning")
+
+
+def test_trace_endpoint_shows_plan_researchers_and_critic(make_job, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from backend.main import app
+    from backend.services.user import UserService
+
+    with SessionLocal() as session:
+        user = UserService().get_or_create_dev_user(session)
+    job = make_job(user=user, ticker="WDGT")
+    _worker(tmp_path, ScriptedResearcher()).run_once()
+    client = TestClient(app)
+
+    trace = client.get(f"/api/v1/research/{job.id}/trace").json()
+    report = client.get(f"/api/v1/research/{job.id}/report").json()
+
+    assert trace["mode"] == "agent"
+    assert [q["question"] for q in trace["plan"]] == ["What are the main risks?", "How is profitability trending?"]
+    assert {(r["task_id"], r["round"]) for r in trace["researchers"]} == {("q1", 0), ("q2", 0), ("r1g1", 1)}
+    assert trace["researchers"][0]["tool_calls"][0]["tool"] == "search_filings"
+    assert [(r["revision"], r["decision"]) for r in trace["rounds"]] == [(0, "revise"), (1, "finish")]
+    assert trace["rounds"][0]["verdicts"]["unsupported"] == 2
+    assert trace["totals"]["researchers"] == 3 and trace["totals"]["tool_calls"] == 3
+    assert report["research"]["revisions"] == 1
+    assert client.get(f"/api/v1/research/{uuid4()}/trace").status_code == 404
