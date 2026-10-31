@@ -136,7 +136,7 @@ export interface paths {
         };
         /**
          * Get Valuation
-         * @description The job's DCF intrinsic value: every assumption with its source, the projection, bridge and sensitivity.
+         * @description The job's fair value with every sourced assumption, set against a delayed share price when one is available.
          */
         get: operations["get_valuation_api_v1_research__job_id__valuation_get"];
         put?: never;
@@ -158,7 +158,7 @@ export interface paths {
         put?: never;
         /**
          * Valuation What If
-         * @description Recompute the DCF with some assumptions changed. Deterministic, saves nothing, no AI.
+         * @description Recompute the fair value with some assumptions changed, or check a typed price. Saves nothing, no AI.
          */
         post: operations["valuation_what_if_api_v1_research__job_id__valuation_what_if_post"];
         delete?: never;
@@ -319,33 +319,6 @@ export interface components {
             source: string;
             /** Editable */
             editable: boolean;
-        };
-        /** BridgeOut */
-        BridgeOut: {
-            /** Present Value Of Fcff */
-            present_value_of_fcff: string;
-            /** Present Value Of Terminal */
-            present_value_of_terminal: string;
-            /** Operating Value */
-            operating_value: string;
-            /** Cash */
-            cash: string;
-            /** Non Operating Assets */
-            non_operating_assets: string;
-            /** Debt */
-            debt: string;
-            /** Lease Liabilities */
-            lease_liabilities: string;
-            /** Minority Interest */
-            minority_interest: string;
-            /** Options Value */
-            options_value: string;
-            /** Equity Value */
-            equity_value: string;
-            /** Shares */
-            shares: string;
-            /** Value Per Share */
-            value_per_share: string;
         };
         /** BudgetOut */
         BudgetOut: {
@@ -525,6 +498,19 @@ export interface components {
              */
             latest_activity_at: string;
         };
+        /** CostOfCapitalOut */
+        CostOfCapitalOut: {
+            /** Levered Beta */
+            levered_beta: string;
+            /** Cost Of Equity */
+            cost_of_equity: string;
+            /** Pre Tax Cost Of Debt */
+            pre_tax_cost_of_debt: string;
+            /** After Tax Cost Of Debt */
+            after_tax_cost_of_debt: string;
+            /** Cost Of Capital */
+            cost_of_capital: string;
+        };
         /** CostSummary */
         CostSummary: {
             budget: components["schemas"]["BudgetOut"];
@@ -576,28 +562,35 @@ export interface components {
              */
             date: string;
         };
-        /** DerivedOut */
-        DerivedOut: {
-            /** Levered Beta */
-            levered_beta: string;
-            /** Cost Of Equity */
-            cost_of_equity: string;
-            /** Pre Tax Cost Of Debt */
-            pre_tax_cost_of_debt: string;
-            /** After Tax Cost Of Debt */
-            after_tax_cost_of_debt: string;
-            /** Cost Of Capital */
-            cost_of_capital: string;
-            /** Stable Cost Of Equity */
-            stable_cost_of_equity: string;
-            /** Stable Cost Of Capital */
-            stable_cost_of_capital: string;
-            /** Reinvestment Rate */
-            reinvestment_rate: string;
-            /** Stable Reinvestment Rate */
-            stable_reinvestment_rate: string;
-            /** Stable Return On Capital */
-            stable_return_on_capital: string;
+        /** DcfOut */
+        DcfOut: {
+            /** Projection */
+            projection: components["schemas"]["ProjectionRow"][];
+            /** Terminal Value */
+            terminal_value: string;
+            /** Terminal Present Value */
+            terminal_present_value: string;
+            /** Terminal Share */
+            terminal_share: string;
+            /** Present Value Of Fcf */
+            present_value_of_fcf: string;
+            /** Enterprise Value */
+            enterprise_value: string;
+            /** Equity Value */
+            equity_value: string;
+            /** Value Per Share */
+            value_per_share: string;
+        };
+        /** EpvOut */
+        EpvOut: {
+            /** Normalised After Tax Operating Income */
+            normalised_after_tax_operating_income: string;
+            /** Enterprise Value */
+            enterprise_value: string;
+            /** Equity Value */
+            equity_value: string;
+            /** Value Per Share */
+            value_per_share: string;
         };
         /** EvidenceOut */
         EvidenceOut: {
@@ -615,6 +608,25 @@ export interface components {
             /** Context */
             context: string | null;
             document: components["schemas"]["FilingOut"];
+        };
+        /** FcfYear */
+        FcfYear: {
+            /** Fiscal Year */
+            fiscal_year: number;
+            /** Operating Cash Flow */
+            operating_cash_flow: string;
+            /** After Tax Interest */
+            after_tax_interest: string;
+            /** Capital Expenditure */
+            capital_expenditure: string;
+            /** Share Based Compensation */
+            share_based_compensation: string;
+            /** Fcf */
+            fcf: string;
+            /** Revenue */
+            revenue?: string | null;
+            /** Fcf Margin */
+            fcf_margin?: string | null;
         };
         /** FilingOut */
         FilingOut: {
@@ -727,6 +739,15 @@ export interface components {
              */
             created_at: string;
         };
+        /** MarketPriceOut */
+        MarketPriceOut: {
+            /** Price */
+            price: string;
+            /** As Of */
+            as_of: string | null;
+            /** Source */
+            source: string;
+        };
         /** MetaResponse */
         MetaResponse: {
             /** Version */
@@ -819,23 +840,23 @@ export interface components {
         };
         /**
          * PriceCheckOut
-         * @description A price the reader entered, set against the valuation. Decision support, not a recommendation.
+         * @description A share price set against the fair-value range. Decision support, not a recommendation.
          */
         PriceCheckOut: {
             /** Price */
             price: string;
-            /** Value Per Share */
-            value_per_share: string;
+            /** Fair Value */
+            fair_value: string;
             /** Range Low */
-            range_low: string | null;
+            range_low: string;
             /** Range High */
-            range_high: string | null;
+            range_high: string;
             /** Gap */
             gap: string;
             /** Position */
             position: string;
-            /** Implied High Growth */
-            implied_high_growth: string | null;
+            /** Implied Growth */
+            implied_growth: string | null;
             /** Explanation */
             explanation: string;
         };
@@ -847,20 +868,10 @@ export interface components {
             fiscal_year: number;
             /** Growth */
             growth: string;
-            /** Tax Rate */
-            tax_rate: string;
-            /** Ebit */
-            ebit: string;
-            /** After Tax Ebit */
-            after_tax_ebit: string;
-            /** Reinvestment Rate */
-            reinvestment_rate: string;
-            /** Reinvestment */
-            reinvestment: string;
-            /** Fcff */
-            fcff: string;
-            /** Cost Of Capital */
-            cost_of_capital: string;
+            /** Fcf */
+            fcf: string;
+            /** Discount Factor */
+            discount_factor: string;
             /** Present Value */
             present_value: string;
         };
@@ -1158,8 +1169,8 @@ export interface components {
         SensitivityOut: {
             /** Cost Of Capital Deltas */
             cost_of_capital_deltas: string[];
-            /** Stable Growths */
-            stable_growths: string[];
+            /** Growth Deltas */
+            growth_deltas: string[];
             /** Value Per Share */
             value_per_share: (string | null)[][];
         };
@@ -1232,21 +1243,6 @@ export interface components {
             /** Samples */
             samples: number;
         };
-        /** TerminalOut */
-        TerminalOut: {
-            /** After Tax Ebit */
-            after_tax_ebit: string;
-            /** Reinvestment Rate */
-            reinvestment_rate: string;
-            /** Fcff */
-            fcff: string;
-            /** Value */
-            value: string;
-            /** Present Value */
-            present_value: string;
-            /** Share Of Operating Value */
-            share_of_operating_value: string;
-        };
         /** ToolCallOut */
         ToolCallOut: {
             /** Tool */
@@ -1310,29 +1306,30 @@ export interface components {
             industry?: string | null;
             /** Base Year */
             base_year?: number | null;
-            /** Value Per Share */
-            value_per_share?: string | null;
+            /** Fair Value */
+            fair_value?: string | null;
             /** Range Low */
             range_low?: string | null;
             /** Range High */
             range_high?: string | null;
-            /** Equity Value */
-            equity_value?: string | null;
-            /** Operating Value */
-            operating_value?: string | null;
+            /**
+             * Methods Used
+             * @default []
+             */
+            methods_used: string[];
             /**
              * Assumptions
              * @default []
              */
             assumptions: components["schemas"]["AssumptionOut"][];
-            derived?: components["schemas"]["DerivedOut"] | null;
+            cost_of_capital?: components["schemas"]["CostOfCapitalOut"] | null;
             /**
-             * Projection
+             * Fcf History
              * @default []
              */
-            projection: components["schemas"]["ProjectionRow"][];
-            terminal?: components["schemas"]["TerminalOut"] | null;
-            bridge?: components["schemas"]["BridgeOut"] | null;
+            fcf_history: components["schemas"]["FcfYear"][];
+            dcf?: components["schemas"]["DcfOut"] | null;
+            epv?: components["schemas"]["EpvOut"] | null;
             sensitivity?: components["schemas"]["SensitivityOut"] | null;
             /**
              * Warnings
@@ -1349,6 +1346,7 @@ export interface components {
              * @default []
              */
             overridden: string[];
+            market_price?: components["schemas"]["MarketPriceOut"] | null;
             price_check?: components["schemas"]["PriceCheckOut"] | null;
             /**
              * Created At
@@ -1371,28 +1369,24 @@ export interface components {
         };
         /**
          * WhatIfRequest
-         * @description Assumptions a reader may change. Everything else (Rf, betas, filings) stays as stored, so results reproduce.
+         * @description Assumptions a reader may change. Everything else (filings, Rf, betas) stays as stored, so results reproduce.
          */
         WhatIfRequest: {
-            /** High Growth */
-            high_growth?: number | string | null;
+            /** Initial Growth */
+            initial_growth?: number | string | null;
             /** High Growth Years */
             high_growth_years?: number | null;
-            /** Transition Years */
-            transition_years?: number | null;
-            /** Return On Capital */
-            return_on_capital?: number | string | null;
+            /** Fade Years */
+            fade_years?: number | null;
             /** Stable Growth */
             stable_growth?: number | string | null;
-            /** Stable Return On Capital */
-            stable_return_on_capital?: number | string | null;
             /** Equity Risk Premium */
             equity_risk_premium?: number | string | null;
             /** Debt To Capital */
             debt_to_capital?: number | string | null;
             /**
              * Market Price
-             * @description A share price to compare with (typed by the reader; the app fetches no prices).
+             * @description A share price to compare with, instead of the delayed quote.
              */
             market_price?: number | string | null;
         };

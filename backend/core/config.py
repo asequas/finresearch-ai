@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     # Optional requests-per-minute ceilings per model, e.g. {"gemini-3.6-flash": 5}. Empty = no pacing beyond the
     # 1-second spacing; 429s put a model in cool-down either way.
     gemini_model_rpm: dict[str, int] = {}
+    # Share price for the valuation's price check (ADR 0012): "cboe_delayed" (free, personal/demo use) or "none".
+    price_source: Literal["cboe_delayed", "none"] = "cboe_delayed"
     # Second-stage retrieval (ADR 0007): "minilm", "jina-turbo" or "none".
     reranker: str = "minilm"
     rerank_candidates: int = 20

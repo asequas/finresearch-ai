@@ -105,8 +105,8 @@ function MetricBlock({ metric, divided = true }: { metric: Metric; divided?: boo
         </tbody>
       </table>
       <p className="mt-2 text-small text-muted">
-        {metric.key.startsWith("dcf_")
-          ? "A discounted cash flow estimate from the filings and stated assumptions; see the Valuation section for every input and its source."
+        {metric.key.startsWith("val_")
+          ? "A fair-value estimate from the filings and stated assumptions; see the Valuation section for every input and its source."
           : "Inputs come from SEC XBRL company facts."}{" "}
         Calculation version <span className="num">{metric.calculation_version}</span>.
       </p>

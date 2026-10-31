@@ -140,3 +140,20 @@ Write your answer, then compare it with [ADR 0001](adr/0001-postgres-backed-job-
 - **Don't tune towards the price; find the bias** (ADR 0011). Every v1 value was below market; changing one
   assumption at a time traced it to expensed R&D, a 5-year horizon for everyone, and no excess returns forever. All
   three were fixed as Damodaran does, and the remaining gaps are shown as implied vs assumed growth (reverse DCF).
+
+## Fair value: three simple methods and a free delayed price (ADR 0012)
+
+- **Several simple methods beat one elaborate model when trust matters.** A cash-flow DCF, earnings power value (no
+  growth) and a reverse DCF each answer a different question; the range between them is honest uncertainty
+  ([`backend/valuation/fair_value.py`](../backend/valuation/fair_value.py)).
+- **Normalise margins, not dollars.** A 3-year dollar average undervalued a 4× grower; the average FCF margin on
+  the latest revenue keeps the smoothing ([`assumptions.py`](../backend/valuation/assumptions.py),
+  [`test_fair_value_defaults.py`](../tests/unit/test_fair_value_defaults.py)).
+- **Stock compensation is a cost.** Deducted from free cash flow; $12B a year at Microsoft.
+- **Free data, honest licensing.** Cboe's keyless delayed quote is personal-use only: labelled in the UI, cached,
+  isolated behind one function, and a typed price always works ([`price.py`](../backend/valuation/price.py)).
+- **When the model disagrees with the market, quantify it rather than tune it.** All six covered names need 22%+
+  annual FCF growth to justify their prices against 3-14% records; raising long-run growth to the risk-free rate
+  closes less than half the gap.
+- **Injectable dependencies keep tests offline.** The valuation service takes a price fetcher via FastAPI
+  `Depends`, so tests drive "below range" and "above range" without the network.
