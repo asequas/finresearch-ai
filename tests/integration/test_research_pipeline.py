@@ -12,14 +12,15 @@ from backend.models import CalculatedMetric, Claim, Document, DocumentChunk, Fin
 from backend.models.research_job import ResearchJobStatus
 from backend.pipeline.research import Services, research_stages
 from backend.worker.main import Worker
-from tests.fakes import CIK, RESPONSES, FakeLLM, FakeSec
+from tests.fakes import CIK, RESPONSES, FakeLLM, FakeSec, ScriptedResearcher, scripted_agent_model
 
 
 @pytest.fixture
 def run_job(make_job, tmp_path):
     def _run(ticker="WDGT", sec=None):
         job = make_job(ticker=ticker)
-        services = Services(sec_factory=lambda: sec or FakeSec(tmp_path), llm_factory=FakeLLM)
+        services = Services(sec_factory=lambda: sec or FakeSec(tmp_path), llm_factory=FakeLLM,
+                            agent_model_factory=scripted_agent_model(ScriptedResearcher()))
         Worker(stages_factory=lambda: research_stages(services), retry_base_seconds=0).run_once()
         with SessionLocal() as session:
             return session.get(ResearchJob, job.id)
@@ -122,7 +123,8 @@ def test_rerunning_stages_is_idempotent(run_job, tmp_path):
         job_row = session.get(ResearchJob, job.id)
         job_row.status = ResearchJobStatus.QUEUED
         session.commit()
-    services = Services(sec_factory=lambda: FakeSec(tmp_path), llm_factory=FakeLLM)
+    services = Services(sec_factory=lambda: FakeSec(tmp_path), llm_factory=FakeLLM,
+                        agent_model_factory=scripted_agent_model(ScriptedResearcher()))
     Worker(stages_factory=lambda: research_stages(services), retry_base_seconds=0).run_once()
 
     with SessionLocal() as session:

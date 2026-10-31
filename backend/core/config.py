@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     job_busy_retry_base_seconds: int = 60
 
     # Research pipeline
-    pipeline: str = "research"  # "research" or "stub" (Phase 3 stub stages)
+    pipeline: str = "research"  # "research" (agent, ADR 0008), "linear" (ADR 0006 baseline) or "stub"
     gemini_api_key: str | None = None
     gemini_fast_model: str = "gemini-3.5-flash-lite"
     # Pro models have no free-tier quota; a thinking Flash model drafts and synthesizes.

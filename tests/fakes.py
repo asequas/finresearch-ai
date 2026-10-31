@@ -2,9 +2,17 @@
 import hashlib
 import json
 import re
+import uuid
+from typing import Any
+
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+from pydantic import Field
 
 from backend.llm.client import LLMResult, normalise
 from backend.pipeline import prompts
+from backend.pipeline.base import ProviderBusyError
 from backend.sources.sec import SecClient
 
 CIK = "0000999999"
@@ -84,8 +92,15 @@ class FakeLLM:
         return vectors
 
     def generate_json(self, *, prompt, schema, system, strong=False, temperature=0.2):
+        from backend.agent.prompts import AgentPlan, PlannedQuestion
+
         if schema is prompts.ResearchPlan:
             value = schema(sub_questions=["What are the main risks?", "How is profitability trending?"])
+        elif schema is AgentPlan:
+            value = schema(questions=[
+                PlannedQuestion(question="What are the main risks?", focus="risks", approach="Risk factors"),
+                PlannedQuestion(question="How is profitability trending?", focus="profitability", approach="MD&A, margins"),
+            ])
         elif schema is prompts.ClaimDraft:
             # Quote a substantive sentence, as the prompt asks; headings aren't evidence.
             blocks = re.findall(r"\[(E\d+)\] \([^)]*\)\n(.*?)(?=\n\n\[E|\Z)", prompt, re.S)
@@ -136,3 +151,52 @@ def ingest(make_job, tmp_path, ticker="WDGT"):
     services = Services(sec_factory=lambda: FakeSec(tmp_path), llm_factory=FakeLLM)
     Worker(stages_factory=lambda: research_stages(services)[:5], retry_base_seconds=0).run_once()
     return job
+
+
+class ScriptedResearcher(BaseChatModel):
+    """A tool-calling chat model that behaves like a diligent researcher.
+
+    First turn: search the filings for its task. Second turn: report Findings citing the passages that came
+    back. `fail_once` makes the first call for a matching task raise, to test resume after a crash.
+    """
+
+    calls: list = Field(default_factory=list)
+    fail_once: str | None = None
+    failed: set = Field(default_factory=set)
+    on_call: Any = None
+
+    @property
+    def _llm_type(self) -> str:
+        return "scripted"
+
+    def bind_tools(self, tools, **kwargs):
+        return self
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        task = next(m.content for m in messages if isinstance(m, HumanMessage))
+        self.calls.append(task)
+        if self.on_call:
+            self.on_call(task)
+        if self.fail_once and self.fail_once in task and task not in self.failed:
+            self.failed.add(task)
+            raise ProviderBusyError("Gemini's quota is used up for now.")
+        results = [m for m in messages if isinstance(m, ToolMessage)]
+        if not results:
+            subject = re.search(r"(?:sub-question: |rejected this claim from the draft report:\n  )(.+)", task)
+            call = {"name": "search_filings", "args": {"query": subject.group(1) if subject else task[:80]}}
+        else:
+            handles = re.findall(r"\[(P:[0-9a-f]{8})\]", results[-1].content)
+            call = {"name": "Findings", "args": {
+                "answer": "The filings address this directly.",
+                "notes": [{"text": "Widgetco describes this in its 10-K.", "passages": handles[:2] + ["P:deadbeef"], "metrics": []}],
+                "gaps": [],
+            }}
+        message = AIMessage(content="", tool_calls=[{**call, "id": f"call_{uuid.uuid4().hex[:8]}", "type": "tool_call"}])
+        message.usage_metadata = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+        return ChatResult(generations=[ChatGeneration(message=message)])
+
+
+def scripted_agent_model(model: ScriptedResearcher):
+    from backend.llm.chat import AgentModel
+
+    return lambda: AgentModel(model=model, middleware=[], name="scripted")

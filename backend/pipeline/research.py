@@ -9,6 +9,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
+from typing import TYPE_CHECKING
 from decimal import Decimal
 from uuid import UUID
 
@@ -23,6 +24,9 @@ from backend.analysis.retrieval import RetrievedChunk, retrieve
 from backend.analysis.verification import quote_in_source, snap_quote, unmatched_numbers
 from backend.core.config import settings
 from backend.llm.client import LLMClient, get_llm_client
+
+if TYPE_CHECKING:
+    from backend.llm.chat import AgentModel
 from backend.models.calculated_metric import CalculatedMetric
 from backend.models.claim import Claim
 from backend.models.claim_evidence import ClaimEvidence
@@ -58,8 +62,17 @@ class Services:
     sec_factory: Callable[[], SecClient]
     llm_factory: Callable[[], LLMClient]
     reranker_factory: Callable[[], Reranker] = get_reranker
+    # Tool-calling model for the research agent's loops (ADR 0008); tests inject a scripted model.
+    agent_model_factory: Callable[[], "AgentModel"] | None = None
     _sec: SecClient | None = field(default=None, init=False)
     _llm: LLMClient | None = field(default=None, init=False)
+
+    def agent_model(self) -> "AgentModel":
+        if self.agent_model_factory is None:
+            from backend.llm.chat import gemini_agent_model
+
+            return gemini_agent_model()
+        return self.agent_model_factory()
 
     @property
     def reranker(self) -> Reranker:
@@ -737,18 +750,21 @@ def _resolve_basis(assumption: dict, claim_ids: dict, metric_ids: dict) -> dict:
     return {**assumption, "basis": basis, "claim_ids": cited}
 
 
-def research_stages(services: Services | None = None) -> list:
+def research_stages(services: Services | None = None, *, agentic: bool = True) -> list:
+    """Deterministic ingestion, then either the research agent (default) or the linear analysis."""
     services = services or Services(
         sec_factory=lambda: SecClient(settings.sec_user_agent, settings.data_cache_dir),
         llm_factory=get_llm_client,
     )
-    return [
+    ingestion = [
         ResolveCompany(services),
         FetchFilings(services),
         ExtractFinancials(services),
         ComputeMetrics(),
         IndexDocuments(services),
-        Analyze(services),
-        Verify(services),
-        Synthesize(services),
     ]
+    if agentic:
+        from backend.agent.graph import ResearchAgent
+
+        return [*ingestion, ResearchAgent(services)]
+    return [*ingestion, Analyze(services), Verify(services), Synthesize(services)]
