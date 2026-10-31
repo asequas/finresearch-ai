@@ -122,3 +122,18 @@ Write your answer, then compare it with [ADR 0001](adr/0001-postgres-backed-job-
   page renders them live from `GET /research/{id}/trace`.
 - **The chat's record is a table, not a checkpointer.** One source of truth; the agent is rebuilt from recent turns per
   question, and the question and answer commit together.
+
+## Intrinsic value: a deterministic DCF (ADR 0010)
+
+- **Numbers from code, words from the model.** FCFF DCF in Decimal ([`backend/valuation/dcf.py`](../backend/valuation/dcf.py)).
+  Its outputs are `dcf_*` metrics the drafter cites and the verifier checks (to the cent for value per share).
+- **Test against a published example.** The engine reproduces Damodaran's 3M valuation, $86.92 against $86.95 a
+  share, the gap being the book's rounding ([`tests/unit/test_dcf.py`](../tests/unit/test_dcf.py)).
+- **Bottom-up beta without prices.** Industry unlevered beta relevered at the industry D/E; synthetic rating from
+  interest coverage gives the default spread; the Treasury 10-year is the risk-free rate.
+- **Growth must be paid for.** Reinvestment = g ÷ ROC; with stable ROC = cost of capital, extra stable growth adds
+  almost nothing, as the sensitivity grid shows.
+- **Consistency bug found by inspecting results.** Operating leases are inside operating income under ASC 842, so
+  subtracting them as debt double-counted $89B at Amazon.
+- **Reproducible what-ifs.** Stored inputs with sources and dates, a versioned calculation, and overrides that start
+  from the stored inputs and save nothing.

@@ -24,6 +24,8 @@ export type ChatThread = components["schemas"]["ChatThreadResponse"];
 export type ChatMessage = components["schemas"]["ChatMessageOut"];
 export type ChatCitation = components["schemas"]["ChatCitationOut"];
 export type CostSummary = components["schemas"]["CostSummary"];
+export type Valuation = components["schemas"]["ValuationOut"];
+export type WhatIf = components["schemas"]["WhatIfRequest"];
 
 export const api = createClient<import("./schema").paths>({ baseUrl: "" });
 
@@ -134,6 +136,22 @@ export function useCompany(ticker: string) {
     retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
     refetchInterval: (query) =>
       query.state.data?.jobs.some((j) => isActive(j.status)) ? 3000 : false,
+  });
+}
+
+export function useValuation(jobId: string) {
+  return useQuery({
+    queryKey: ["valuation", jobId],
+    queryFn: () => unwrap(api.GET("/api/v1/research/{job_id}/valuation", { params: { path: { job_id: jobId } } })),
+    staleTime: Infinity,
+    retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
+  });
+}
+
+export function useWhatIf(jobId: string) {
+  return useMutation({
+    mutationFn: (body: WhatIf) =>
+      unwrap(api.POST("/api/v1/research/{job_id}/valuation/what-if", { params: { path: { job_id: jobId } }, body })),
   });
 }
 

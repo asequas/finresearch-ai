@@ -15,6 +15,7 @@ from backend.models.research_job_document import ResearchJobDocument
 from backend.models.claim_metric import ClaimMetric
 from backend.models.report_chat_message import ReportChatMessage
 from backend.models.llm_call import LlmCall
+from backend.models.valuation import Valuation
 
 __all__ = [
     "Base",
@@ -34,4 +35,5 @@ __all__ = [
     "ClaimMetric",
     "ReportChatMessage",
     "LlmCall",
+    "Valuation",
 ]

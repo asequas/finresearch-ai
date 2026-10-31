@@ -17,6 +17,7 @@ from backend.models import (
     Report,
     ResearchJob,
     ResearchJobDocument,
+    Valuation,
 )
 from backend.models.financial_snapshot import MONEY_FIELDS
 from backend.models.research_job import ResearchJobStatus
@@ -29,6 +30,7 @@ from backend.schemas.report import (
     FilingOut,
     FinancialPeriodOut,
     FinancialValue,
+    LatestValuation,
     MetricOut,
     ReportResponse,
     VerificationSummary,
@@ -248,9 +250,19 @@ class ReportService:
             item = ResearchJobResponse.model_validate(job)
             item.has_report = job.id in report_job_ids
             job_out.append(item)
+        valuation = session.scalar(
+            select(Valuation)
+            .where(Valuation.research_job_id.in_([j.id for j in jobs]), Valuation.status == "valued")
+            .order_by(Valuation.created_at.desc())
+            .limit(1)
+        )
         return CompanyDetail(
             company=_company_out(company),
             latest_report_job_id=latest.id if latest else None,
+            latest_valuation=LatestValuation(
+                job_id=valuation.research_job_id, value_per_share=valuation.value_per_share,
+                base_year=(valuation.inputs or {}).get("base_year"), created_at=valuation.created_at,
+            ) if valuation else None,
             data_as_of=data_as_of,
             financials=_financials_out(snapshots),
             metrics=[_metric_out(m) for m in metrics],
