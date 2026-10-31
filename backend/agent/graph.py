@@ -203,6 +203,11 @@ def build_graph(deps: AgentDeps) -> StateGraph:
                 name="researcher",
             )
             started = time.perf_counter()
+            # Known before the call, so a researcher that fails still shows what it was doing and how far it got.
+            usage.metadata = {
+                "task_id": task["task_id"], "kind": task["kind"], "question": task["question"], "round": task["round"],
+                "tool_calls": tool_ctx.trace,
+            }
             result = agent.invoke(
                 {"messages": [HumanMessage(task["prompt"])]},
                 {"recursion_limit": 4 * settings.agent_model_calls_per_researcher + 5},
@@ -217,7 +222,12 @@ def build_graph(deps: AgentDeps) -> StateGraph:
             findings = result.get("structured_response")
             seen = set(tool_ctx.seen)
             invented: list[str] = []
-            if findings is None:
+            if findings is not None and not tool_ctx.trace:
+                # Seen live: a model "answered" from memory without one tool call. Nothing it says is evidence.
+                invented = [p for note in findings.notes for p in note.passages]
+                finding = {"answer": "", "notes": [], "fallback_passages": [],
+                           "gaps": ["The researcher answered without consulting the filings, so its answer was discarded."]}
+            elif findings is None:
                 # Budget ran out before the researcher concluded: keep what it looked at, say so.
                 finding = {"answer": "", "notes": [], "gaps": ["The researcher ran out of budget before concluding."],
                            "fallback_passages": tool_ctx.seen[:4]}
@@ -231,12 +241,10 @@ def build_graph(deps: AgentDeps) -> StateGraph:
                 finding = {"answer": findings.answer, "notes": notes, "gaps": findings.gaps, "fallback_passages": []}
             finding.update(task_id=task["task_id"], kind=task["kind"], question=task["question"],
                            focus=task["focus"], round=task["round"])
-            usage.metadata = {
-                "task_id": task["task_id"], "kind": task["kind"], "question": task["question"], "round": task["round"],
-                "answer": finding["answer"], "notes": len(finding["notes"]), "gaps": finding["gaps"],
-                "dropped_handles": invented,
-                "tool_calls": tool_ctx.trace, "ms": round((time.perf_counter() - started) * 1000),
-            }
+            usage.metadata.update(
+                answer=finding["answer"], notes=len(finding["notes"]), gaps=finding["gaps"], dropped_handles=invented,
+                ms=round((time.perf_counter() - started) * 1000),
+            )
         return {"findings": [finding]}
 
     # ---- draft --------------------------------------------------------------
@@ -346,8 +354,8 @@ def build_graph(deps: AgentDeps) -> StateGraph:
             if earlier:
                 best = max(earlier, key=draft_score)
                 if draft_score(best) > draft_score(latest):
-                    reason = (f"the revised draft verified worse ({draft_score(latest)[0]:g} vs {draft_score(best)[0]:g} "
-                              f"material claims supported); restoring the round {best['revision']} draft")
+                    reason = (f"the revised draft had {draft_score(latest)[0]:g} important claims supported against "
+                              f"{draft_score(best)[0]:g} before, so the round {best['revision']} draft is restored")
                     usage.metadata = {"decision": "restore", "reason": reason, "gaps": [], "revision": revision}
                     return {"decision": "restore", "feedback": [], "restored_from": best["revision"]}
             gaps = [
@@ -364,10 +372,16 @@ def build_graph(deps: AgentDeps) -> StateGraph:
                 ]
             gaps = gaps[: settings.agent_max_researchers]
             decision = "revise" if gaps and revision < settings.agent_max_revisions else "finish"
+            claims_failing = sum(1 for g in gaps if g["kind"] == "claim")
+            questions_empty = len(gaps) - claims_failing
+            what = " and ".join(part for part in (
+                f"{claims_failing} important {'claim' if claims_failing == 1 else 'claims'} failed verification" if claims_failing else "",
+                f"{questions_empty} {'question' if questions_empty == 1 else 'questions'} found no evidence" if questions_empty else "",
+            ) if part)
             reason = (
-                f"{len(gaps)} material gap(s); research round {revision + 1}" if decision == "revise"
-                else "no material gaps" if not gaps
-                else f"{len(gaps)} gap(s) remain but the revision budget ({settings.agent_max_revisions}) is spent"
+                f"{what}; starting research round {revision + 1}" if decision == "revise"
+                else "every important claim is supported" if not gaps
+                else f"{what}, but the revision budget ({settings.agent_max_revisions} round) is used up"
             )
             usage.metadata = {"decision": decision, "reason": reason, "gaps": gaps, "revision": revision}
         update: dict[str, Any] = {"decision": decision, "feedback": gaps}

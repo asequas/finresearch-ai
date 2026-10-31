@@ -89,7 +89,10 @@ export function AnalystChat({ jobId, open, onClose }: { jobId: string; open: boo
   }, [open]);
 
   const messages = thread.data?.messages ?? [];
-  useEffect(() => end.current?.scrollIntoView({ block: "end" }), [messages.length, pending]);
+  // Block body on purpose: scrollIntoView returns a Promise in recent Chromium, and an effect must not return one.
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: "end" });
+  }, [messages.length, pending]);
 
   const send = (question: string) => {
     const text = question.trim();

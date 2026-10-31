@@ -37,7 +37,7 @@ class AgentTraceService:
                 tool_calls=meta.get("tool_calls", []), model=run.model, input_tokens=run.input_tokens,
                 output_tokens=run.output_tokens, error_message=run.error_message,
             ))
-        # A researcher retried after a crash appears twice; show the latest attempt of each task.
+        # A researcher retried after a crash appears once per attempt; show the latest attempt of each task.
         latest: dict[tuple[str, int], ResearcherOut] = {}
         for r in researchers:
             latest[(r.task_id, r.round)] = r
