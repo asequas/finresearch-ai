@@ -802,6 +802,11 @@ export interface components {
             /** Revision */
             revision: number;
             /**
+             * Restored
+             * @default false
+             */
+            restored: boolean;
+            /**
              * Verdicts
              * @default {}
              */

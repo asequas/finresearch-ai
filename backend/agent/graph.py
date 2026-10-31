@@ -18,6 +18,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Annotated, Any, TypedDict
+from uuid import UUID
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware, ToolCallLimitMiddleware
@@ -25,11 +26,13 @@ from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
+from sqlalchemy import select
 
 from backend.agent import prompts as agent_prompts
 from backend.agent.tools import ToolContext, build_tools, chunk_handle, resolve_handles
 from backend.analysis.retrieval import RetrievedChunk, retrieve
 from backend.core.config import settings
+from backend.models.document_chunk import DocumentChunk
 from backend.models.research_job import ResearchStage
 from backend.pipeline import prompts
 from backend.pipeline.base import JobContext, LeaseLost, StageUsage
@@ -67,7 +70,17 @@ class ResearchState(TypedDict, total=False):
     revision: int  # completed critic-driven research rounds
     feedback: list[dict]  # the claims the critic sent back, shown to the next draft
     verify_rounds: Annotated[list[dict], operator.add]  # verdict counts after each verify pass
-    decision: str  # the critic's last decision: "revise" or "finish"
+    # Every draft as written (claims + which chunk each excerpt id meant), so a worse revision can be undone.
+    drafts: Annotated[list[dict], operator.add]
+    decision: str  # the critic's last decision: "revise", "restore" or "finish"
+    restored_from: int  # the revision whose draft was put back, if any
+
+
+def draft_score(verify_round: dict) -> tuple[float, int]:
+    """How well a draft verified: material claims first (partial support counts half), then all supported."""
+    material = [c for c in verify_round["claims"] if c["importance"] >= 2]
+    weighted = sum(1.0 if c["status"] == "supported" else 0.5 if c["status"] == "partially_supported" else 0.0 for c in material)
+    return weighted, sum(1 for c in verify_round["claims"] if c["status"] == "supported")
 
 
 class ResearcherTask(TypedDict):
@@ -281,15 +294,41 @@ def build_graph(deps: AgentDeps) -> StateGraph:
                 "revision": state.get("revision", 0), "excerpts": len(chunks), "claims": len(result.value.claims),
                 "findings": len(findings), "feedback": len(feedback),
             }
+        return {"drafts": [{
+            "revision": state.get("revision", 0),
+            "claims": result.value.model_dump(),
+            "excerpts": {eid: [str(chunk.id), chunk.rerank_score] for eid, chunk in excerpt_ids.items()},
+        }]}
+
+    # ---- restore (undo a revision that verified worse) ------------------------------
+    def restore(state: ResearchState) -> dict:
+        with tracked(deps, ResearchStage.DRAFTING, name="restore") as usage:
+            target = state["restored_from"]
+            best = next(d for d in state["drafts"] if d["revision"] == target)
+            with ctx.session_factory() as session:
+                documents = _job_documents(session, ctx.job_id)
+                _, metric_ids = _metric_lines(_metrics(session, ctx.job_id))  # same order as when drafted
+                chunks = {c.id: c for c in session.scalars(
+                    select(DocumentChunk).where(DocumentChunk.id.in_([UUID(cid) for cid, _ in best["excerpts"].values()]))
+                )}
+            excerpt_ids = {
+                eid: RetrievedChunk(id=chunk.id, document_id=chunk.document_id, section=chunk.section, content=chunk.content,
+                                    score=0.0, vector_rank=None, keyword_rank=None, rerank_score=rerank)
+                for eid, (cid, rerank) in best["excerpts"].items()
+                if (chunk := chunks.get(UUID(cid))) is not None
+            }
+            save_claims(ctx, prompts.ClaimDraft.model_validate(best["claims"]), excerpt_ids, metric_ids, documents)
+            usage.metadata = {"revision": state.get("revision", 0), "restored_from": target}
         return {}
 
     # ---- verify ---------------------------------------------------------------
     def verify(state: ResearchState) -> dict:
         with tracked(deps, ResearchStage.VERIFYING) as usage:
             outcome = verify_claims(ctx, services.llm)
-            usage.metadata = {**outcome.metadata(), "revision": state.get("revision", 0)}
+            restored = state.get("restored_from") is not None
+            usage.metadata = {**outcome.metadata(), "revision": state.get("revision", 0), "restored": restored}
         return {"verify_rounds": [{
-            "revision": state.get("revision", 0), "counts": outcome.counts,
+            "revision": state.get("revision", 0), "restored": restored, "counts": outcome.counts,
             "claims": [{k: c[k] for k in ("id", "text", "importance", "status", "note")} for c in outcome.claims],
         }]}
 
@@ -297,6 +336,20 @@ def build_graph(deps: AgentDeps) -> StateGraph:
     def critic(state: ResearchState) -> dict:
         with tracked(deps, ResearchStage.VERIFYING, name="critic") as usage:
             latest = state["verify_rounds"][-1]
+            revision = state.get("revision", 0)
+            if state.get("restored_from") is not None:
+                usage.metadata = {"decision": "finish", "revision": revision, "gaps": [], "restored": True,
+                                  "reason": f"kept the draft from round {state['restored_from']}, which verified better"}
+                return {"decision": "finish", "feedback": []}
+            # A revision must never make the report worse: if it verified below an earlier draft, put that one back.
+            earlier = [r for r in state["verify_rounds"][:-1] if not r.get("restored")]
+            if earlier:
+                best = max(earlier, key=draft_score)
+                if draft_score(best) > draft_score(latest):
+                    reason = (f"the revised draft verified worse ({draft_score(latest)[0]:g} vs {draft_score(best)[0]:g} "
+                              f"material claims supported); restoring the round {best['revision']} draft")
+                    usage.metadata = {"decision": "restore", "reason": reason, "gaps": [], "revision": revision}
+                    return {"decision": "restore", "feedback": [], "restored_from": best["revision"]}
             gaps = [
                 {"kind": "claim", "text": c["text"], "note": c["note"], "claim_id": c["id"]}
                 for c in latest["claims"]
@@ -310,7 +363,6 @@ def build_graph(deps: AgentDeps) -> StateGraph:
                     for q in state.get("plan", []) if q["id"] not in answered
                 ]
             gaps = gaps[: settings.agent_max_researchers]
-            revision = state.get("revision", 0)
             decision = "revise" if gaps and revision < settings.agent_max_revisions else "finish"
             reason = (
                 f"{len(gaps)} material gap(s); research round {revision + 1}" if decision == "revise"
@@ -324,6 +376,8 @@ def build_graph(deps: AgentDeps) -> StateGraph:
         return update
 
     def after_critic(state: ResearchState) -> list[Send] | str:
+        if state.get("decision") == "restore":
+            return "restore"
         if state.get("decision") != "revise":
             return "synthesize"
         sends = []
@@ -352,7 +406,9 @@ def build_graph(deps: AgentDeps) -> StateGraph:
                 "questions": [q["question"] for q in state.get("plan", [])],
                 "researchers": len(findings),
                 "revisions": state.get("revision", 0),
-                "verify_rounds": [{"revision": r["revision"], "counts": r["counts"]} for r in state.get("verify_rounds", [])],
+                "verify_rounds": [{"revision": r["revision"], "restored": r.get("restored", False), "counts": r["counts"]}
+                                  for r in state.get("verify_rounds", [])],
+                "restored_from": state.get("restored_from"),
             })
         return {}
 
@@ -362,13 +418,15 @@ def build_graph(deps: AgentDeps) -> StateGraph:
     graph.add_node("draft", draft)
     graph.add_node("verify", verify)
     graph.add_node("critic", critic)
+    graph.add_node("restore", restore)
     graph.add_node("synthesize", synthesize)
     graph.add_edge(START, "plan")
     graph.add_conditional_edges("plan", dispatch_plan, ["researcher"])
     graph.add_edge("researcher", "draft")
     graph.add_edge("draft", "verify")
     graph.add_edge("verify", "critic")
-    graph.add_conditional_edges("critic", after_critic, ["researcher", "synthesize"])
+    graph.add_conditional_edges("critic", after_critic, ["researcher", "restore", "synthesize"])
+    graph.add_edge("restore", "verify")
     graph.add_edge("synthesize", END)
     return graph
 
