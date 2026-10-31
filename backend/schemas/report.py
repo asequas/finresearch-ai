@@ -146,9 +146,17 @@ class CompanySummary(BaseModel):
     latest_activity_at: datetime
 
 
+class LatestValuation(BaseModel):
+    job_id: uuid.UUID
+    value_per_share: Decimal
+    base_year: int | None
+    created_at: datetime
+
+
 class CompanyDetail(BaseModel):
     company: CompanyOut
     latest_report_job_id: uuid.UUID | None
+    latest_valuation: LatestValuation | None = None
     data_as_of: date | None
     financials: list[FinancialPeriodOut]
     metrics: list[MetricOut]

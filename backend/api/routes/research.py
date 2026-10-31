@@ -20,6 +20,8 @@ from backend.schemas.agent import AgentTraceResponse, ChatQuestion, ChatThreadRe
 from backend.schemas.report import CompanyDetail, CompanySummary, ReportResponse
 from backend.services.agent_trace import AgentTraceService
 from backend.services.analyst_chat import AnalystChatService
+from backend.services.valuation import ValuationService
+from backend.schemas.valuation import ValuationOut, WhatIfRequest
 from backend.services.report import ReportService
 from backend.services.research_job import ResearchJobService
 
@@ -145,6 +147,35 @@ def get_research_trace(
 ):
     """What the research agent did: its plan, each researcher's tool calls, and the critic's decisions."""
     return AgentTraceService().get_trace(db, job_id=job_id, user_id=current_user.id)
+
+
+@router.get(
+    "/{job_id}/valuation",
+    response_model=ValuationOut,
+    responses={404: {"description": "Job not found or not valued yet"}},
+)
+def get_valuation(
+    job_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The job's DCF intrinsic value: every assumption with its source, the projection, bridge and sensitivity."""
+    return ValuationService().get(db, job_id=job_id, user_id=current_user.id)
+
+
+@router.post(
+    "/{job_id}/valuation/what-if",
+    response_model=ValuationOut,
+    responses={400: {"description": "The assumptions break the model's constraints"}, 404: {"description": "Not found"}},
+)
+def valuation_what_if(
+    job_id: UUID,
+    body: WhatIfRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Recompute the DCF with some assumptions changed. Deterministic, saves nothing, no AI."""
+    return ValuationService().what_if(db, job_id=job_id, user_id=current_user.id, request=body)
 
 
 def get_chat_service() -> AnalystChatService:
