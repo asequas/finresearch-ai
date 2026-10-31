@@ -13,12 +13,14 @@ recommends buying or selling.
 
 ## Tour
 
-Real research on Amazon's 10-K and 10-Q, run end to end through the app.
+Real research on Amazon, Microsoft and Apple filings, run end to end through the app.
 
 | | |
 | --- | --- |
 | ![Overview](docs/screenshots/overview.png) | ![Live job](docs/screenshots/job-live.png) |
-| **Overview.** What's running and what's ready; ⌘K searches every company, report and job. | **Live job.** Eight checkpointed stages with typical durations; leave and come back any time. |
+| **Overview.** What's running and what's ready; ⌘K searches every company, report and job. | **Live job.** Ten checkpointed stages with typical durations; leave and come back any time. |
+| ![Research agent](docs/screenshots/agent-trace.png) | ![Ask the analyst](docs/screenshots/analyst-chat.png) |
+| **Research agent.** The plan, every researcher's tool calls, and the fact-checker's decisions. Here a revision verified worse, so the agent undid it. | **Ask the analyst.** Follow-up questions answered by a tool-using agent; each cited quote is checked against the filing. |
 | ![Report](docs/screenshots/report.png) | ![Claim inspector](docs/screenshots/claim-inspector.png) |
 | **Report.** The answer first, then summary, financials, scenarios, risks and the evidence ledger. | **Claim inspector.** Every claim opens to the filing passage with the quoted words highlighted. |
 | ![Company workspace](docs/screenshots/company.png) | ![Phone](docs/screenshots/phone-report.png) |

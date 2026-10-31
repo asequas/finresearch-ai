@@ -55,7 +55,7 @@ export function JobPage() {
   const typical = new Map((meta.data?.stage_timings ?? []).map((t) => [t.stage, t.median_ms]));
   const typicalTotal = STAGES.reduce((sum, s) => sum + (typical.get(s.key) ?? 0), 0);
   const completedStages = STAGES.filter((s) => states?.[s.key] === "done").length;
-  const researchRuns = (data?.stages ?? []).filter((r) => r.stage === "researching");
+  const researchRuns = (data?.stages ?? []).filter((r) => r.stage === "researching" && r.status === "completed");
   const remainingMs = data ? STAGES.filter((s) => states?.[s.key] !== "done").reduce((sum, s) => sum + (typical.get(s.key) ?? 0), 0) : 0;
   const retryIn = data?.status === "queued" && data.attempts > 0 ? Math.max(0, new Date(data.run_after).getTime() - Date.now()) : 0;
 
