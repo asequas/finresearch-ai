@@ -26,6 +26,14 @@ def run_pipeline(ctx: JobContext, stages: Sequence[Stage], queue: JobQueueServic
 
         ctx.checkpoint()
         progress = min(99, done_weight * 100 // total_weight)
+        if getattr(stage, "reports_own_stages", False):
+            # A composite stage (the research agent's graph) records a run per node itself; its `name` is
+            # its last node, so the skip check above sees it as done only when the whole graph finished.
+            end = min(99, (done_weight + stage.weight) * 100 // total_weight)
+            stage.run(ctx, queue=queue, progress=(progress, end))
+            done_weight += stage.weight
+            continue
+
         if not queue.set_stage(ctx.job_id, ctx.lease_token, stage=stage.name, progress=progress):
             raise LeaseLost(f"Lease lost for job {ctx.job_id}")
 

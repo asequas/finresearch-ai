@@ -88,13 +88,16 @@ class JobQueueService:
             )
 
     def start_stage_run(
-        self, job_id: UUID, lease_token: UUID, *, stage: ResearchStage, attempt: int
+        self, job_id: UUID, lease_token: UUID, *, stage: ResearchStage, attempt: int, agent_name: str | None = None
     ) -> UUID | None:
-        """Record a stage start; None if this worker no longer owns the job."""
+        """Record a stage start; None if this worker no longer owns the job.
+
+        `agent_name` names a run inside a stage (e.g. the critic); it defaults to the stage itself.
+        """
         with self.session_factory() as session:
             if not self.repository.assert_lease(session, job_id=job_id, lease_token=lease_token):
                 return None
-            run = AgentRun(research_job_id=job_id, agent_name=stage.value, status="running", attempt=attempt)
+            run = AgentRun(research_job_id=job_id, agent_name=agent_name or stage.value, status="running", attempt=attempt)
             session.add(run)
             session.commit()
             return run.id

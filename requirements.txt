@@ -8,8 +8,14 @@ psycopg[binary]==3.3.4
 alembic==1.19.1
 pgvector==0.5.0
 httpx==0.28.1
-google-genai==2.19.0
+google-genai==2.34.0  # >=2.20 required by langchain-google-genai
 fastembed==0.9.1  # local cross-encoder reranker on ONNX Runtime (ADR 0007)
+# Agentic research (ADR 0008)
+langgraph==1.2.18
+langgraph-checkpoint-postgres==3.2.0
+langchain==1.3.16
+langchain-core==1.7.3
+langchain-google-genai==4.4.2
 
 # Tests
 pytest==9.1.1

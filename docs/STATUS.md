@@ -1,6 +1,6 @@
 # FinResearch AI: Status
 
-Last updated: 2026-10-31 (after the live-demo bug sweep, reranking and the UI pass).
+Last updated: 2026-10-31 (after the LangGraph research agent and Ask the analyst, ADR 0008).
 Labels: **verified** = demonstrated by a test or a command this session; **unverified** = built, not yet demonstrated
 against real external services; **proposed** = not built.
 
@@ -8,7 +8,12 @@ against real external services; **proposed** = not built.
 
 | Area | Evidence |
 | --- | --- |
-| Test suite: 138 tests (plus 1 opt-in model test) on an isolated `finresearch_test` database; ran 4× under full CPU load with no failures | `python -m pytest`; `-m model` for the real reranker |
+| Test suite: 164 tests (plus 1 opt-in model test) on an isolated `finresearch_test` database | `python -m pytest`; `-m model` for the real reranker |
+| Research agent (ADR 0008): LangGraph plan → parallel tool-using researchers (`Send`) → draft → verify → code critic → bounded revision → synthesize; Postgres checkpointer inside the durable queue. Tested: fan-out and merge, revision loop bounded, a worse revision restored, resume after a 429 without re-running finished researchers, cancel mid-research, tool-less answers discarded, invented handles dropped | `tests/integration/test_research_agent.py`, `test_agent_tools.py` |
+| Agent on live data: MSFT completed through three Gemini 503 attempts, resuming the graph each time (finished researchers not repeated); the revision verified worse and the critic restored the better draft. Final: 15/16 supported, 100% quotes verbatim, 100% numbers match | `python -m backend.evals.citations auto 167fb858-…`; `/research/{id}/trace` |
+| Agent self-correction on live data: NVDA's critic sent one unsupported claim and one empty-handed question back; after the revision all 16 claims were supported (100% quotes, 100% numbers), in 4 min 47 s | `/research/cb8b23ad-…/trace` |
+| Ask the analyst: tool-using follow-up agent; citations checked against the filing (live: 2 of 2 quotes verified on MSFT); 429 at the turn cap, 503 with Retry-After when the provider is busy, question + answer committed together | `tests/integration/test_analyst_chat.py`, playwright-cli session |
+| Agent trace UI (job page) and chat sheet (report) in the browser at 1440 and 390, zero console errors | playwright-cli, `docs/screenshots/agent-trace.png`, `analyst-chat.png` |
 | Retrieval quality: tuned hybrid + MiniLM rerank vs the original hybrid on a 30-question gold set: R@1 0.567→0.733, R@3 0.800→0.900, MRR 0.706→0.811, nDCG@6 0.528→0.626 (ADR 0007) | `python -m backend.evals.retrieval` |
 | Live browser walkthrough (playwright-cli) at 1440/768/390: submit from the palette, live stages, cancel/retry, report, claim/figure/metric inspectors, keyboard Escape + focus return, filters in the URL, Markdown export, company workspace; zero console errors | demo session 2026-10-30/31 |
 | Design gate: 0 FAIL on every route (`inspect.mjs --app`), lint 0 FAIL; Vercel web-interface-guideline findings fixed | automated design inspection, run locally |
@@ -62,7 +67,8 @@ misleading cancel copy; quote highlight missing for table rows.
 
 | # | Severity | Issue |
 | --- | --- | --- |
-| D1 | Medium | Gemini free-tier capacity varies a lot by hour (503/504 bursts). Jobs now ride it out, but a burst can stretch a 4-minute job to 10+. Report quality drops when the draft falls back to a lite model (quotes still verified, so weaker claims are flagged, not hidden). |
+| D1 | Medium | Gemini free-tier capacity varies a lot by hour (503/504 bursts, 429s on the strong model). The agent multiplies calls (16-21 tool calls, ~110k input tokens per job), so the free tier now delays most jobs: MSFT took 11 minutes over 3 attempts. Jobs ride it out (resume + restore guard). Fix planned: move to a paid Gemini tier, then raise `agent_max_concurrency`. |
+| D7 | Low | The AAPL report from the first agent run predates the restore guard (7/15 supported). Retry it to regenerate. |
 | D2 | Low | Reranking costs ~40 s per job on a laptop CPU (7 sub-questions × ~6 s). |
 | D3 | Low | Gold set is 30 questions; differences of one question (0.033) are noise. |
 | D4 | Low | Debt uses reported long-term debt only; stated in every report's limitations. |
@@ -74,8 +80,8 @@ misleading cancel copy; quote highlight missing for table rows.
 Phases 1–5b: built and verified on real data. Phase 6: scope-reduced by decision (no price data). Phase 7 (deploy):
 CI added; deployment and auth deferred by decision.
 
-1. Human-label claims from the six real reports and score citation correctness against the 95% target. *proposed*
-2. Grow the retrieval gold set to 100+ questions across more sectors before tuning weights further. *proposed*
+1. Paid Gemini tier, then tune agent concurrency and budgets against latency; re-run AAPL. *proposed*
+2. Human-label claims from the real reports and score citation correctness against the 95% target. *proposed*
 3. Deployment design (auth, budgets, rate limits, hosting) through the coach protocol. *proposed*
 
 ## Open decisions
