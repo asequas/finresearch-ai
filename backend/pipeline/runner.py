@@ -3,6 +3,7 @@ import logging
 from collections.abc import Sequence
 from datetime import datetime, timezone
 
+from backend.costs.ledger import usage_scope
 from backend.pipeline.base import JobContext, LeaseLost, Stage, StageUsage
 from backend.services.job_queue import JobQueueService
 
@@ -45,7 +46,8 @@ def run_pipeline(ctx: JobContext, stages: Sequence[Stage], queue: JobQueueServic
         ctx.usage = StageUsage()
         logger.info("job %s: running %s (attempt %d)", ctx.job_id, stage.name.value, ctx.attempt)
         try:
-            stage.run(ctx)
+            with usage_scope(job_id=ctx.job_id, source="job", stage=stage.name.value):
+                stage.run(ctx)
         except BaseException as exc:
             queue.finish_stage_run(
                 run_id,

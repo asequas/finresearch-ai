@@ -84,3 +84,13 @@ def clean_tables():
     tables = ", ".join(table.name for table in Base.metadata.sorted_tables)
     with engine.begin() as connection:
         connection.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+
+
+@pytest.fixture(autouse=True)
+def fresh_model_cooldowns():
+    """Model cool-downs are process-wide state; a 429 in one test must not skip models in the next."""
+    from backend.llm.pacing import COOLDOWN
+
+    COOLDOWN.reset()
+    yield
+    COOLDOWN.reset()

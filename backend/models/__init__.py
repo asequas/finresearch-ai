@@ -14,6 +14,7 @@ from backend.models.calculated_metric import CalculatedMetric
 from backend.models.research_job_document import ResearchJobDocument
 from backend.models.claim_metric import ClaimMetric
 from backend.models.report_chat_message import ReportChatMessage
+from backend.models.llm_call import LlmCall
 
 __all__ = [
     "Base",
@@ -32,4 +33,5 @@ __all__ = [
     "ResearchJobDocument",
     "ClaimMetric",
     "ReportChatMessage",
+    "LlmCall",
 ]
