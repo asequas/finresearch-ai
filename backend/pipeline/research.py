@@ -354,8 +354,55 @@ class IndexDocuments:
 
 # ---- 6. Analyze ------------------------------------------------------------
 
+def excerpt_block(chunks: list[RetrievedChunk]) -> tuple[str, dict[str, RetrievedChunk]]:
+    """Label passages E1..En for the drafting prompt; the ids are how the model cites them."""
+    ids = {f"E{i}": chunk for i, chunk in enumerate(chunks, start=1)}
+    text = "\n\n".join(f"[{eid}] ({chunk.section})\n{chunk.content}" for eid, chunk in ids.items())
+    return text, ids
+
+
+def save_claims(
+    ctx: JobContext,
+    draft: prompts.ClaimDraft,
+    excerpt_ids: dict[str, RetrievedChunk],
+    metric_ids: dict[str, CalculatedMetric],
+    documents: list[Document],
+) -> None:
+    """Replace the job's claims with this draft (delete-then-insert, so a rerun never duplicates)."""
+    with ctx.transaction() as session:
+        _delete_claims(session, ctx.job_id)
+        for position, item in enumerate(draft.claims):
+            referenced = [metric_ids[ref] for ref in item.metric_refs if ref in metric_ids]
+            claim = Claim(
+                research_job_id=ctx.job_id, claim_text=item.text.strip(), claim_type=item.claim_type,
+                section=item.section, position=position, importance=item.importance,
+                verification_status="not_verified",
+            )
+            session.add(claim)
+            session.flush()
+            for metric in {m.id: m for m in referenced}.values():
+                session.add(ClaimMetric(claim_id=claim.id, metric_id=metric.id))
+            for ref in item.evidence:
+                chunk = excerpt_ids.get(ref.excerpt_id)
+                if chunk is None or not ref.quote.strip():
+                    continue
+                evidence = Evidence(
+                    document_id=chunk.document_id, document_chunk_id=chunk.id, excerpt=ref.quote.strip(),
+                    source_url=next((d.url for d in documents if d.id == chunk.document_id), None),
+                )
+                session.add(evidence)
+                session.flush()
+                relevance = chunk.rerank_score if chunk.rerank_score is not None else None
+                session.add(ClaimEvidence(
+                    claim_id=claim.id, evidence_id=evidence.id,
+                    relevance_score=Decimal(str(round(relevance, 4))) if relevance is not None else None,
+                ))
+
+
 @dataclass
 class Analyze:
+    """The linear pipeline's analysis: plan, one retrieval per sub-question, one draft (ADR 0006)."""
+
     services: Services
     name: ResearchStage = ResearchStage.ANALYZING
     weight: int = 25
@@ -400,8 +447,7 @@ class Analyze:
                 if rank < len(hits) and len(chunks) < MAX_EXCERPTS:
                     chunks.setdefault(hits[rank].id, hits[rank])
         excerpts = list(chunks.values())
-        excerpt_ids = {f"E{i}": chunk for i, chunk in enumerate(excerpts, start=1)}
-        excerpt_text = "\n\n".join(f"[{eid}] ({chunk.section})\n{chunk.content}" for eid, chunk in excerpt_ids.items())
+        excerpt_text, excerpt_ids = excerpt_block(excerpts)
 
         draft = llm.generate_json(
             prompt=prompts.DRAFT_PROMPT.format(
@@ -413,35 +459,7 @@ class Analyze:
             strong=True,
         )
         _record(ctx, draft)
-
-        with ctx.transaction() as session:
-            _delete_claims(session, ctx.job_id)
-            for position, item in enumerate(draft.value.claims):
-                referenced = [metric_ids[ref] for ref in item.metric_refs if ref in metric_ids]
-                claim = Claim(
-                    research_job_id=ctx.job_id, claim_text=item.text.strip(), claim_type=item.claim_type,
-                    section=item.section, position=position, importance=item.importance,
-                    verification_status="not_verified",
-                )
-                session.add(claim)
-                session.flush()
-                for metric in {m.id: m for m in referenced}.values():
-                    session.add(ClaimMetric(claim_id=claim.id, metric_id=metric.id))
-                for ref in item.evidence:
-                    chunk = excerpt_ids.get(ref.excerpt_id)
-                    if chunk is None or not ref.quote.strip():
-                        continue
-                    evidence = Evidence(
-                        document_id=chunk.document_id, document_chunk_id=chunk.id, excerpt=ref.quote.strip(),
-                        source_url=next((d.url for d in documents if d.id == chunk.document_id), None),
-                    )
-                    session.add(evidence)
-                    session.flush()
-                    relevance = chunk.rerank_score if chunk.rerank_score is not None else None
-                    session.add(ClaimEvidence(
-                        claim_id=claim.id, evidence_id=evidence.id,
-                        relevance_score=Decimal(str(round(relevance, 4))) if relevance is not None else None,
-                    ))
+        save_claims(ctx, draft.value, excerpt_ids, metric_ids, documents)
         ctx.usage.metadata = {
             "questions": questions, "excerpts": len(excerpts), "claims": len(draft.value.claims),
             "reranker": reranker.name, "retrieval": retrieval_log,
@@ -458,102 +476,125 @@ def _delete_claims(session: Session, job_id: UUID) -> None:
 # ---- 7. Verify -------------------------------------------------------------
 
 @dataclass
+class VerifyResult:
+    counts: dict[str, int]
+    quotes_checked: int
+    quotes_snapped: int
+    # [{id, text, section, claim_type, importance, status, note}] in draft order
+    claims: list[dict]
+
+    def metadata(self) -> dict:
+        return {"verdicts": self.counts, "quotes_checked": self.quotes_checked, "quotes_snapped": self.quotes_snapped}
+
+
+def verify_claims(ctx: JobContext, llm: LLMClient) -> VerifyResult:
+    """Deterministic checks first (quote in filing, numbers match metrics), the LLM judge only for the rest."""
+    with _read(ctx) as session:
+        claims = list(session.scalars(select(Claim).where(Claim.research_job_id == ctx.job_id).order_by(Claim.position)))
+        metrics_by_id = {m.id: m for m in _metrics(session, ctx.job_id)}
+        claim_metric_ids: dict[UUID, list[UUID]] = {}
+        for claim_id, metric_id in session.execute(
+            select(ClaimMetric.claim_id, ClaimMetric.metric_id)
+            .join(Claim, Claim.id == ClaimMetric.claim_id)
+            .where(Claim.research_job_id == ctx.job_id)
+        ):
+            claim_metric_ids.setdefault(claim_id, []).append(metric_id)
+        evidence_rows = session.execute(
+            select(ClaimEvidence.claim_id, Evidence, DocumentChunk.content)
+            .join(Evidence, Evidence.id == ClaimEvidence.evidence_id)
+            .join(DocumentChunk, DocumentChunk.id == Evidence.document_chunk_id, isouter=True)
+            .join(Claim, Claim.id == ClaimEvidence.claim_id)
+            .where(Claim.research_job_id == ctx.job_id)
+        ).all()
+
+    quote_ok: dict[UUID, bool] = {}
+    snapped: dict[UUID, str] = {}
+    quotes_by_claim: dict[UUID, list[str]] = {}
+    for claim_id, evidence, chunk_content in evidence_rows:
+        excerpt = evidence.excerpt
+        ok = bool(chunk_content) and quote_in_source(excerpt, chunk_content)
+        if not ok and chunk_content:
+            exact = snap_quote(excerpt, chunk_content)
+            if exact is not None:
+                snapped[evidence.id] = exact
+                excerpt, ok = exact, True
+        quote_ok[evidence.id] = ok
+        if ok:
+            quotes_by_claim.setdefault(claim_id, []).append(excerpt)
+
+    decided: dict[UUID, tuple[str, str]] = {}
+    to_judge: list[Claim] = []
+    for claim in claims:
+        referenced = [metrics_by_id[m] for m in claim_metric_ids.get(claim.id, []) if m in metrics_by_id]
+        if claim.claim_type == "calculation":
+            if not referenced:
+                decided[claim.id] = ("unsupported", "No computed metric backs this calculation.")
+                continue
+            stray = unmatched_numbers(claim.claim_text, [(m.value, m.unit) for m in referenced])
+            if stray:
+                decided[claim.id] = ("unsupported", f"Numbers {', '.join(stray)} don't match the cited metric.")
+            else:
+                shown = ", ".join(f"{m.label} {m.period} = {describe_metric(m.metric_key, m.value, m.unit)}" for m in referenced)
+                decided[claim.id] = ("supported", f"Matches computed metric: {shown}.")
+        elif claim.claim_type == "fact" and not quotes_by_claim.get(claim.id):
+            decided[claim.id] = ("unsupported", "No cited quote was found verbatim in the filing.")
+        elif not quotes_by_claim.get(claim.id) and not referenced:
+            decided[claim.id] = ("unsupported", "No verifiable evidence was cited.")
+        else:
+            to_judge.append(claim)
+
+    if to_judge:
+        blocks = []
+        for i, claim in enumerate(to_judge, start=1):
+            material = [f'  quote: "{q}"' for q in quotes_by_claim.get(claim.id, [])]
+            for metric_id in claim_metric_ids.get(claim.id, []):
+                m = metrics_by_id[metric_id]
+                material.append(f"  metric: {m.label} {m.period} = {describe_metric(m.metric_key, m.value, m.unit)}")
+            blocks.append(f"C{i} [{claim.claim_type}] {claim.claim_text}\n" + "\n".join(material))
+        judged = llm.generate_json(
+            prompt=prompts.JUDGE_PROMPT.format(claims="\n\n".join(blocks)),
+            schema=prompts.Judgements,
+            system="You are a strict fact-checker for financial research.",
+            temperature=0.0,
+        )
+        _record(ctx, judged)
+        verdicts = {j.claim_id: j for j in judged.value.judgements}
+        for i, claim in enumerate(to_judge, start=1):
+            verdict = verdicts.get(f"C{i}")
+            decided[claim.id] = (
+                (verdict.verdict, verdict.note) if verdict else ("not_verified", "The fact-checker returned no verdict.")
+            )
+
+    with ctx.transaction() as session:
+        for evidence_id, ok in quote_ok.items():
+            values = {"quote_verified": ok}
+            if evidence_id in snapped:
+                values["excerpt"] = snapped[evidence_id]  # show the filing's exact words, not the paraphrase
+            session.execute(update(Evidence).where(Evidence.id == evidence_id).values(**values))
+        for claim_id, (status, note) in decided.items():
+            session.execute(
+                update(Claim).where(Claim.id == claim_id).values(verification_status=status, verification_note=note)
+            )
+    counts: dict[str, int] = {}
+    for status, _ in decided.values():
+        counts[status] = counts.get(status, 0) + 1
+    outcome = [
+        {"id": str(c.id), "text": c.claim_text, "section": c.section, "claim_type": c.claim_type,
+         "importance": c.importance, "status": decided.get(c.id, ("not_verified", ""))[0],
+         "note": decided.get(c.id, ("", ""))[1]}
+        for c in claims
+    ]
+    return VerifyResult(counts=counts, quotes_checked=len(quote_ok), quotes_snapped=len(snapped), claims=outcome)
+
+
+@dataclass
 class Verify:
     services: Services
     name: ResearchStage = ResearchStage.VERIFYING
     weight: int = 15
 
     def run(self, ctx: JobContext) -> None:
-        with _read(ctx) as session:
-            claims = list(session.scalars(select(Claim).where(Claim.research_job_id == ctx.job_id).order_by(Claim.position)))
-            metrics_by_id = {m.id: m for m in _metrics(session, ctx.job_id)}
-            claim_metric_ids: dict[UUID, list[UUID]] = {}
-            for claim_id, metric_id in session.execute(
-                select(ClaimMetric.claim_id, ClaimMetric.metric_id)
-                .join(Claim, Claim.id == ClaimMetric.claim_id)
-                .where(Claim.research_job_id == ctx.job_id)
-            ):
-                claim_metric_ids.setdefault(claim_id, []).append(metric_id)
-            evidence_rows = session.execute(
-                select(ClaimEvidence.claim_id, Evidence, DocumentChunk.content)
-                .join(Evidence, Evidence.id == ClaimEvidence.evidence_id)
-                .join(DocumentChunk, DocumentChunk.id == Evidence.document_chunk_id, isouter=True)
-                .join(Claim, Claim.id == ClaimEvidence.claim_id)
-                .where(Claim.research_job_id == ctx.job_id)
-            ).all()
-
-        quote_ok: dict[UUID, bool] = {}
-        snapped: dict[UUID, str] = {}
-        quotes_by_claim: dict[UUID, list[str]] = {}
-        for claim_id, evidence, chunk_content in evidence_rows:
-            excerpt = evidence.excerpt
-            ok = bool(chunk_content) and quote_in_source(excerpt, chunk_content)
-            if not ok and chunk_content:
-                exact = snap_quote(excerpt, chunk_content)
-                if exact is not None:
-                    snapped[evidence.id] = exact
-                    excerpt, ok = exact, True
-            quote_ok[evidence.id] = ok
-            if ok:
-                quotes_by_claim.setdefault(claim_id, []).append(excerpt)
-
-        decided: dict[UUID, tuple[str, str]] = {}
-        to_judge: list[Claim] = []
-        for claim in claims:
-            referenced = [metrics_by_id[m] for m in claim_metric_ids.get(claim.id, []) if m in metrics_by_id]
-            if claim.claim_type == "calculation":
-                if not referenced:
-                    decided[claim.id] = ("unsupported", "No computed metric backs this calculation.")
-                    continue
-                stray = unmatched_numbers(claim.claim_text, [(m.value, m.unit) for m in referenced])
-                if stray:
-                    decided[claim.id] = ("unsupported", f"Numbers {', '.join(stray)} don't match the cited metric.")
-                else:
-                    shown = ", ".join(f"{m.label} {m.period} = {describe_metric(m.metric_key, m.value, m.unit)}" for m in referenced)
-                    decided[claim.id] = ("supported", f"Matches computed metric: {shown}.")
-            elif claim.claim_type == "fact" and not quotes_by_claim.get(claim.id):
-                decided[claim.id] = ("unsupported", "No cited quote was found verbatim in the filing.")
-            elif not quotes_by_claim.get(claim.id) and not referenced:
-                decided[claim.id] = ("unsupported", "No verifiable evidence was cited.")
-            else:
-                to_judge.append(claim)
-
-        if to_judge:
-            blocks = []
-            for i, claim in enumerate(to_judge, start=1):
-                material = [f'  quote: "{q}"' for q in quotes_by_claim.get(claim.id, [])]
-                for metric_id in claim_metric_ids.get(claim.id, []):
-                    m = metrics_by_id[metric_id]
-                    material.append(f"  metric: {m.label} {m.period} = {describe_metric(m.metric_key, m.value, m.unit)}")
-                blocks.append(f"C{i} [{claim.claim_type}] {claim.claim_text}\n" + "\n".join(material))
-            judged = self.services.llm.generate_json(
-                prompt=prompts.JUDGE_PROMPT.format(claims="\n\n".join(blocks)),
-                schema=prompts.Judgements,
-                system="You are a strict fact-checker for financial research.",
-                temperature=0.0,
-            )
-            _record(ctx, judged)
-            verdicts = {j.claim_id: j for j in judged.value.judgements}
-            for i, claim in enumerate(to_judge, start=1):
-                verdict = verdicts.get(f"C{i}")
-                decided[claim.id] = (
-                    (verdict.verdict, verdict.note) if verdict else ("not_verified", "The fact-checker returned no verdict.")
-                )
-
-        with ctx.transaction() as session:
-            for evidence_id, ok in quote_ok.items():
-                values = {"quote_verified": ok}
-                if evidence_id in snapped:
-                    values["excerpt"] = snapped[evidence_id]  # show the filing's exact words, not the paraphrase
-                session.execute(update(Evidence).where(Evidence.id == evidence_id).values(**values))
-            for claim_id, (status, note) in decided.items():
-                session.execute(
-                    update(Claim).where(Claim.id == claim_id).values(verification_status=status, verification_note=note)
-                )
-        counts: dict[str, int] = {}
-        for status, _ in decided.values():
-            counts[status] = counts.get(status, 0) + 1
-        ctx.usage.metadata = {"verdicts": counts, "quotes_checked": len(quote_ok), "quotes_snapped": len(snapped)}
+        ctx.usage.metadata = verify_claims(ctx, self.services.llm).metadata()
 
 
 # ---- 8. Synthesize ---------------------------------------------------------
@@ -586,6 +627,84 @@ def build_limitations(session: Session, job_id: UUID) -> list[str]:
     return limitations
 
 
+def write_report(ctx: JobContext, llm: LLMClient, *, research: dict | None = None) -> None:
+    """Write the report from verified claims only. `research` describes how the evidence was gathered."""
+    with _read(ctx) as session:
+        claims = list(
+            session.scalars(
+                select(Claim)
+                .where(Claim.research_job_id == ctx.job_id, Claim.verification_status.in_(["supported", "partially_supported"]))
+                .order_by(Claim.position)
+            )
+        )
+        metrics = _metrics(session, ctx.job_id)
+        period_end = _latest_period_end(session, ctx.job_id)
+        limitations = build_limitations(session, ctx.job_id)
+        documents = _job_documents(session, ctx.job_id)
+    if not claims:
+        raise PermanentError("No claims survived verification, so no trustworthy report could be written.")
+
+    claim_ids = {f"C{i}": claim for i, claim in enumerate(claims, start=1)}
+    claim_text = "\n".join(
+        f"{cid} [{c.section}/{c.claim_type}/{c.verification_status}] {c.claim_text}" for cid, c in claim_ids.items()
+    )
+    latest = [m for m in metrics if m.fiscal_year == (period_end.year if period_end else None) or "-" in m.period]
+    metric_text, metric_ids = _metric_lines(latest or metrics)
+
+    result = llm.generate_json(
+        prompt=prompts.SYNTHESIS_PROMPT.format(
+            query=ctx.query, company=ctx.company, ticker=ctx.ticker, period_end=period_end,
+            claims=claim_text, metrics=metric_text, limitations="\n".join(f"- {l}" for l in limitations),
+        ),
+        schema=prompts.ReportDraft,
+        system=prompts.ANALYST_SYSTEM,
+        strong=True,
+        temperature=0.3,
+    )
+    _record(ctx, result)
+    draft = result.value
+
+    def resolve(ids: list[str]) -> list[str]:
+        return [str(claim_ids[i].id) for i in ids if i in claim_ids]
+
+    full_report = {
+        "headline": draft.headline,
+        "direct_answer": draft.direct_answer,
+        "key_points": [{"text": p.text, "claim_ids": resolve(p.claim_ids)} for p in draft.key_points],
+        "open_questions": draft.open_questions,
+        "filings": [
+            {"id": str(d.id), "form": d.form_type, "accession": d.accession_number, "filed": d.filed_at.isoformat() if d.filed_at else None,
+             "period": d.document_date.isoformat() if d.document_date else None, "url": d.url}
+            for d in documents
+        ],
+        "disclaimer": DISCLAIMER,
+    }
+    if research is not None:
+        full_report["research"] = research
+    values = dict(
+        executive_summary=draft.executive_summary,
+        investment_thesis=draft.investment_thesis,
+        valuation_summary={"scenarios": [
+            {"name": s.name, "summary": s.summary, "assumptions": [
+                _resolve_basis(a.model_dump(), claim_ids, metric_ids) for a in s.assumptions
+            ]}
+            for s in draft.scenarios
+        ]},
+        risk_summary={"risks": [{**r.model_dump(exclude={"claim_ids"}), "claim_ids": resolve(r.claim_ids)} for r in draft.risks]},
+        full_report=full_report,
+        data_as_of=period_end,
+        limitations=limitations,
+        models_used={"fast": llm.fast_model, "strong": llm.strong_model, "embedding": settings.gemini_embedding_model},
+        updated_at=datetime.now(timezone.utc),
+    )
+    with ctx.transaction() as session:
+        session.execute(
+            insert(Report)
+            .values(research_job_id=ctx.job_id, created_at=datetime.now(timezone.utc), **values)
+            .on_conflict_do_update(index_elements=["research_job_id"], set_=values)
+        )
+
+
 @dataclass
 class Synthesize:
     services: Services
@@ -593,79 +712,7 @@ class Synthesize:
     weight: int = 10
 
     def run(self, ctx: JobContext) -> None:
-        with _read(ctx) as session:
-            claims = list(
-                session.scalars(
-                    select(Claim)
-                    .where(Claim.research_job_id == ctx.job_id, Claim.verification_status.in_(["supported", "partially_supported"]))
-                    .order_by(Claim.position)
-                )
-            )
-            metrics = _metrics(session, ctx.job_id)
-            period_end = _latest_period_end(session, ctx.job_id)
-            limitations = build_limitations(session, ctx.job_id)
-            documents = _job_documents(session, ctx.job_id)
-        if not claims:
-            raise PermanentError("No claims survived verification, so no trustworthy report could be written.")
-
-        claim_ids = {f"C{i}": claim for i, claim in enumerate(claims, start=1)}
-        claim_text = "\n".join(
-            f"{cid} [{c.section}/{c.claim_type}/{c.verification_status}] {c.claim_text}" for cid, c in claim_ids.items()
-        )
-        latest = [m for m in metrics if m.fiscal_year == (period_end.year if period_end else None) or "-" in m.period]
-        metric_text, metric_ids = _metric_lines(latest or metrics)
-
-        result = self.services.llm.generate_json(
-            prompt=prompts.SYNTHESIS_PROMPT.format(
-                query=ctx.query, company=ctx.company, ticker=ctx.ticker, period_end=period_end,
-                claims=claim_text, metrics=metric_text, limitations="\n".join(f"- {l}" for l in limitations),
-            ),
-            schema=prompts.ReportDraft,
-            system=prompts.ANALYST_SYSTEM,
-            strong=True,
-            temperature=0.3,
-        )
-        _record(ctx, result)
-        draft = result.value
-
-        def resolve(ids: list[str]) -> list[str]:
-            return [str(claim_ids[i].id) for i in ids if i in claim_ids]
-
-        full_report = {
-            "headline": draft.headline,
-            "direct_answer": draft.direct_answer,
-            "key_points": [{"text": p.text, "claim_ids": resolve(p.claim_ids)} for p in draft.key_points],
-            "open_questions": draft.open_questions,
-            "filings": [
-                {"id": str(d.id), "form": d.form_type, "accession": d.accession_number, "filed": d.filed_at.isoformat() if d.filed_at else None,
-                 "period": d.document_date.isoformat() if d.document_date else None, "url": d.url}
-                for d in documents
-            ],
-            "disclaimer": DISCLAIMER,
-        }
-        values = dict(
-            executive_summary=draft.executive_summary,
-            investment_thesis=draft.investment_thesis,
-            valuation_summary={"scenarios": [
-                {"name": s.name, "summary": s.summary, "assumptions": [
-                    _resolve_basis(a.model_dump(), claim_ids, metric_ids) for a in s.assumptions
-                ]}
-                for s in draft.scenarios
-            ]},
-            risk_summary={"risks": [{**r.model_dump(exclude={"claim_ids"}), "claim_ids": resolve(r.claim_ids)} for r in draft.risks]},
-            full_report=full_report,
-            data_as_of=period_end,
-            limitations=limitations,
-            models_used={"fast": self.services.llm.fast_model, "strong": self.services.llm.strong_model,
-                         "embedding": settings.gemini_embedding_model},
-            updated_at=datetime.now(timezone.utc),
-        )
-        with ctx.transaction() as session:
-            session.execute(
-                insert(Report)
-                .values(research_job_id=ctx.job_id, created_at=datetime.now(timezone.utc), **values)
-                .on_conflict_do_update(index_elements=["research_job_id"], set_=values)
-            )
+        write_report(ctx, self.services.llm)
 
 
 _REF = re.compile(r"\b([CM])(\d+)\b")
