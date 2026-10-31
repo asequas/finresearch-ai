@@ -17,6 +17,12 @@ export type CompanySummary = components["schemas"]["CompanySummary"];
 export type CompanyDetail = components["schemas"]["CompanyDetail"];
 export type Meta = components["schemas"]["MetaResponse"];
 export type CreateRequest = components["schemas"]["ResearchCreateRequest"];
+export type Trace = components["schemas"]["AgentTraceResponse"];
+export type Researcher = components["schemas"]["ResearcherOut"];
+export type ToolCall = components["schemas"]["ToolCallOut"];
+export type ChatThread = components["schemas"]["ChatThreadResponse"];
+export type ChatMessage = components["schemas"]["ChatMessageOut"];
+export type ChatCitation = components["schemas"]["ChatCitationOut"];
 
 export const api = createClient<import("./schema").paths>({ baseUrl: "" });
 
@@ -86,6 +92,33 @@ export function useReport(jobId: string, enabled = true) {
     queryFn: () => unwrap(api.GET("/api/v1/research/{job_id}/report", { params: { path: { job_id: jobId } } })),
     staleTime: Infinity,
     retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
+  });
+}
+
+/** What the research agent did; polled while the job runs so the activity panel fills in live. */
+export function useTrace(jobId: string, live: boolean) {
+  return useQuery({
+    queryKey: ["trace", jobId],
+    queryFn: () => unwrap(api.GET("/api/v1/research/{job_id}/trace", { params: { path: { job_id: jobId } } })),
+    refetchInterval: live ? 2000 : false,
+  });
+}
+
+export function useChat(jobId: string, enabled = true) {
+  return useQuery({
+    queryKey: ["chat", jobId],
+    enabled,
+    queryFn: () => unwrap(api.GET("/api/v1/research/{job_id}/chat", { params: { path: { job_id: jobId } } })),
+    retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
+  });
+}
+
+export function useAskAnalyst(jobId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (question: string) =>
+      unwrap(api.POST("/api/v1/research/{job_id}/chat", { params: { path: { job_id: jobId } }, body: { question } })),
+    onSuccess: (thread) => client.setQueryData(["chat", jobId], thread),
   });
 }
 
