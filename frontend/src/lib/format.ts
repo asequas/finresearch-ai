@@ -120,8 +120,10 @@ export const STAGES: { key: Stage; label: string; detail: string }[] = [
   { key: "extracting_financials", label: "Extract financials", detail: "Five fiscal years from XBRL" },
   { key: "computing_metrics", label: "Compute metrics", detail: "Margins, growth, cash flow, debt ratios" },
   { key: "indexing_documents", label: "Index filings", detail: "Sections, chunks, 768-d embeddings" },
-  { key: "analyzing", label: "Analyze", detail: "Retrieve passages, draft claims" },
-  { key: "verifying", label: "Verify", detail: "Quotes, numbers, fact-check" },
+  { key: "planning", label: "Plan", detail: "Split the question into sub-questions" },
+  { key: "researching", label: "Research", detail: "Parallel agents search filings and metrics" },
+  { key: "drafting", label: "Draft", detail: "Claims from the researchers' evidence" },
+  { key: "verifying", label: "Verify", detail: "Quotes, numbers, fact-check; re-research failures" },
   { key: "synthesizing", label: "Write report", detail: "Summary, scenarios, risks" },
 ];
 

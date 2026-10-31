@@ -2,21 +2,25 @@
 
 [![CI](https://github.com/asequas/finresearch-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/asequas/finresearch-ai/actions/workflows/ci.yml)
 
-Evidence-backed research on US-listed companies. Ask a question about a ticker; FinResearch reads the company's
-SEC filings, computes its financials with tested formulas, drafts claims, checks every claim against its source,
-and writes a report in which any statement opens to the passage, figure or formula behind it.
+Evidence-backed research on US-listed companies, done by a team of agents. Ask a question about a ticker: a planner
+splits it into sub-questions, researcher agents search the company's SEC filings and code-computed financials in
+parallel, a fact-checker verifies every claim and sends material failures back for another look, and the report
+lets any statement open to the passage, figure or formula behind it. Then ask the analyst follow-up questions; its
+citations are checked too.
 
 It's decision support, not a stock picker: unsupported claims are flagged, limitations are listed, and nothing
 recommends buying or selling.
 
 ## Tour
 
-Real research on Amazon's 10-K and 10-Q, run end to end through the app.
+Real research on Amazon, Microsoft and NVIDIA filings, run end to end through the app.
 
 | | |
 | --- | --- |
 | ![Overview](docs/screenshots/overview.png) | ![Live job](docs/screenshots/job-live.png) |
-| **Overview.** What's running and what's ready; ⌘K searches every company, report and job. | **Live job.** Eight checkpointed stages with typical durations; leave and come back any time. |
+| **Overview.** What's running and what's ready; ⌘K searches every company, report and job. | **Live job.** Ten checkpointed stages with typical durations; leave and come back any time. |
+| ![Research agent](docs/screenshots/agent-trace.png) | ![Ask the analyst](docs/screenshots/analyst-chat.png) |
+| **Research agent.** The plan, every researcher's tool calls, and the fact-checker's decisions. Here it sent a failed claim and an empty-handed question back for another round, and all 16 claims ended up supported. | **Ask the analyst.** Follow-up questions answered by a tool-using agent; each cited quote is checked against the filing. |
 | ![Report](docs/screenshots/report.png) | ![Claim inspector](docs/screenshots/claim-inspector.png) |
 | **Report.** The answer first, then summary, financials, scenarios, risks and the evidence ledger. | **Claim inspector.** Every claim opens to the filing passage with the quoted words highlighted. |
 | ![Company workspace](docs/screenshots/company.png) | ![Phone](docs/screenshots/phone-report.png) |
@@ -44,8 +48,21 @@ flowchart LR
   W1 --> GEM["Gemini<br/>flash-lite + thinking flash · 768-d embeddings"]
 ```
 
-A job runs eight checkpointed stages; each writes its outputs idempotently, and a retry resumes after the last
-completed stage.
+Ingestion is deterministic code; the research itself is a LangGraph agent graph (ADR 0008), checkpointed in Postgres
+so a retried job resumes at the node that failed:
+
+```mermaid
+flowchart LR
+  P["plan<br/>(3-6 sub-questions)"] -- "Send × N" --> R["researcher agents<br/>search_filings · read_passage<br/>get_metrics · get_reported_figures"]
+  R --> D["draft claims<br/>(cited passages only)"]
+  D --> V["verify<br/>quote · number · judge"]
+  V --> C{"critic<br/>(code)"}
+  C -- "material claim failed<br/>and budget left" --> R
+  C -- "done" --> S["write report"]
+```
+
+Each stage writes its outputs idempotently, every node is lease-fenced, and the job page shows each researcher's
+tool calls live.
 
 | Stage | Kind | Output |
 | --- | --- | --- |
@@ -54,8 +71,10 @@ completed stage.
 | Extract financials | deterministic | five fiscal years from XBRL, latest filing wins on restatement |
 | Compute metrics | deterministic | margins, FCF, growth, ROE, leverage, CAGR, each with formula and inputs |
 | Index filings | deterministic + embeddings | section-aware chunks, `tsvector` + HNSW `vector(768)` |
-| Analyze | retrieval + LLM | sub-questions, tuned hybrid retrieval reranked by a local cross-encoder, drafted claims |
-| Verify | code first, then LLM | quote check, numeric check, fact-check verdicts |
+| Plan | LLM | 3-6 sub-questions, each with a focus |
+| Research | parallel tool-using agents | each researcher searches (tuned hybrid + local cross-encoder rerank), reads passages and pulls metrics, within a call budget |
+| Draft | LLM | claims citing only passages the researchers read, plus verifier feedback on a revision |
+| Verify | code first, then LLM; code-routed revision | quote check, numeric check, fact-check verdicts; material failures go back to a researcher once |
 | Synthesize | LLM | answer, summary, bull/base/bear with anchored assumptions, risks, limitations |
 
 Design decisions, alternatives and failure modes are written up as ADRs in [`docs/adr/`](docs/adr):
@@ -65,7 +84,8 @@ Design decisions, alternatives and failure modes are written up as ADRs in [`doc
 [enum storage](docs/adr/0004-enum-storage.md) ·
 [evidence and provenance model](docs/adr/0005-evidence-and-provenance-model.md) ·
 [pipeline, retrieval and LLM use](docs/adr/0006-research-pipeline-retrieval-and-llm.md) ·
-[retrieval tuning and reranking](docs/adr/0007-retrieval-tuning-and-reranking.md).
+[retrieval tuning and reranking](docs/adr/0007-retrieval-tuning-and-reranking.md) ·
+[LangGraph research agent](docs/adr/0008-langgraph-research-agent.md).
 
 Retrieval quality on a 30-question gold set over real filings (ADR 0007):
 
@@ -124,7 +144,9 @@ cd frontend && npm run typecheck && npm run api:check
 
 The suite covers the queue's concurrency guarantees (ten threads racing for one job, zombie-worker fencing, a real
 `kill -9` of a worker process mid-job, graceful SIGTERM), the API contract, schema constraints, every metric formula,
-XBRL extraction, filing parsing, and the full pipeline end to end with a fake SEC transport and a fake LLM.
+XBRL extraction, filing parsing, and the full pipeline end to end with a fake SEC transport, a fake LLM and a
+scripted tool-calling model: the agent's fan-out, its bounded revision loop, resume after a 429 without re-running
+finished researchers, cancel mid-research, the trace API and the analyst chat's citation checks.
 
 ## Evaluation
 
@@ -142,7 +164,8 @@ backend/
   api/            routes, dependencies (dev identity until auth lands)
   services/       transactions live here: job submission, queue operations, reports
   repositories/   SQL, including the fenced queue updates (never commit)
-  pipeline/       stage runner, research stages, prompts and output schemas
+  agent/          LangGraph research graph, researcher tools, Postgres checkpointer
+  pipeline/       stage runner, ingestion stages, prompts and output schemas
   sources/        SEC EDGAR client, XBRL extraction, filing text parsing
   analysis/       metrics (Decimal), chunking, hybrid retrieval, verification
   llm/            provider adapter (Gemini) with retry classification

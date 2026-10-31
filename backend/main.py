@@ -5,7 +5,14 @@ from fastapi.responses import JSONResponse
 from backend.api.routes.meta import router as meta_router
 from backend.api.routes.research import companies_router, router as research_router
 from backend.core.config import settings
-from backend.services.errors import BadRequestError, ConflictError, InvalidStateError, NotFoundError
+from backend.services.errors import (
+    BadRequestError,
+    ConflictError,
+    InvalidStateError,
+    LimitReachedError,
+    NotFoundError,
+    UpstreamBusyError,
+)
 
 
 app = FastAPI(
@@ -36,6 +43,18 @@ def conflict(_request: Request, exc: Exception) -> JSONResponse:
 @app.exception_handler(BadRequestError)
 def bad_request(_request: Request, exc: BadRequestError) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"detail": str(exc)})
+
+
+@app.exception_handler(LimitReachedError)
+def limit_reached(_request: Request, exc: LimitReachedError) -> JSONResponse:
+    return JSONResponse(status_code=status.HTTP_429_TOO_MANY_REQUESTS, content={"detail": str(exc)})
+
+
+@app.exception_handler(UpstreamBusyError)
+def upstream_busy(_request: Request, exc: UpstreamBusyError) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={"detail": str(exc)}, headers={"Retry-After": "60"}
+    )
 
 
 @app.get("/health")
