@@ -37,7 +37,10 @@ def test_a_completed_job_carries_a_sourced_dcf_valuation_and_citable_metrics(mak
     assert inputs["base_ebit"] == "30250000000.0000" and inputs["effective_tax_rate"] == "0.2"  # 6B tax / 30B pre-tax
     assert "Machinery" in inputs["sources"]["unlevered_beta"] and inputs["sources"]["industry"] == "Machinery"
     assert inputs["lease_liabilities"] == "0"  # already inside operating income
-    assert len(valuation.result["projection"]) == 10 and valuation.result["sensitivity"]["value_per_share"]
+    # ROC ~39% vs ~8% cost of capital: a lasting advantage, so 10 high-growth years + 5 transition (ADR 0011).
+    assert inputs["high_growth_years"] == 10 and inputs["sources"]["high_growth_years"].startswith("10: return on capital")
+    assert len(valuation.result["projection"]) == 15 and valuation.result["sensitivity"]["value_per_share"]
+    assert inputs["sources"]["stable_return_on_capital"].startswith("midway between")
     assert set(metrics) == {"dcf_value_per_share", "dcf_equity_value", "dcf_operating_value", "dcf_cost_of_capital",
                             "dcf_high_growth", "dcf_stable_growth", "dcf_terminal_share"}
     assert metrics["dcf_value_per_share"].unit == "USD/share"

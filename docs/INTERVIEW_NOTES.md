@@ -137,3 +137,6 @@ Write your answer, then compare it with [ADR 0001](adr/0001-postgres-backed-job-
   subtracting them as debt double-counted $89B at Amazon.
 - **Reproducible what-ifs.** Stored inputs with sources and dates, a versioned calculation, and overrides that start
   from the stored inputs and save nothing.
+- **Don't tune towards the price; find the bias** (ADR 0011). Every v1 value was below market; changing one
+  assumption at a time traced it to expensed R&D, a 5-year horizon for everyone, and no excess returns forever. All
+  three were fixed as Damodaran does, and the remaining gaps are shown as implied vs assumed growth (reverse DCF).

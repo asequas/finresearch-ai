@@ -125,3 +125,36 @@ def test_fundamental_growth_falls_back_to_revenue_when_the_firm_shrinks_capital(
 
     assert result.method == "revenue CAGR (fallback)"
     assert abs(result.growth - D("0.10")) < D("0.0001")
+
+
+def test_research_asset_amortises_rd_straight_line():
+    from backend.valuation.dcf import research_asset
+
+    periods = [_period(y, research_and_development=rd) for y, rd in [(2021, 100), (2022, 120), (2023, 150)]]
+    research = research_asset(periods, life=3)
+
+    # FY2023 asset: 150 + 120 × 2/3 + 100 × 1/3 = 263.33; amortisation: (120 + 100 + 100 [assumed]) / 3.
+    assert abs(research.asset[2023] - D("263.3333")) < D("0.001")
+    assert abs(research.amortisation[2023] - D("106.6667")) < D("0.001")
+    assert abs(research.adjustment(2023) - D("43.3333")) < D("0.001")
+    assert research.estimated_years == 3  # 2018-2020 (needed for the earlier years) assumed equal to 2021
+
+
+def test_capitalising_rd_raises_reinvestment_and_measures_return_on_the_research_asset():
+    from backend.valuation.dcf import research_asset
+
+    def periods(rd):
+        return [
+            _period(2021, operating_income=80, research_and_development=rd * D("0.8"), stockholders_equity=400),
+            _period(2022, operating_income=90, research_and_development=rd * D("0.9"), stockholders_equity=450,
+                    capital_expenditure=10, depreciation_amortization=10),
+            _period(2023, operating_income=100, research_and_development=rd, stockholders_equity=500,
+                    capital_expenditure=10, depreciation_amortization=10),
+        ]
+
+    plain = fundamentals(periods(D("50")), marginal_tax=D("0"))
+    capitalised = fundamentals(periods(D("50")), marginal_tax=D("0"), research=research_asset(periods(D("50")), 3))
+
+    assert plain.reinvestment_rate == D("0")  # capex = depreciation: looks like no reinvestment at all
+    assert capitalised.reinvestment_rate > D("0.05")  # growing R&D is reinvestment
+    assert capitalised.return_on_capital < D("0.25")  # measured on equity + the research asset, not equity alone

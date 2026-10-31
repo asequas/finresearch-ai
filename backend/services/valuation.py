@@ -7,9 +7,16 @@ from sqlalchemy.orm import Session
 
 from backend.models.research_job import ResearchJob
 from backend.models.valuation import Valuation
-from backend.schemas.valuation import AssumptionOut, ValuationOut, WhatIfRequest
+from backend.schemas.valuation import AssumptionOut, PriceCheckOut, ValuationOut, WhatIfRequest
 from backend.services.errors import BadRequestError, NotFoundError
-from backend.valuation.dcf import DcfInputs, InvalidAssumptions, ValuationSkipped, apply_overrides, value_firm
+from backend.valuation.dcf import (
+    DcfInputs,
+    InvalidAssumptions,
+    ValuationSkipped,
+    apply_overrides,
+    implied_high_growth,
+    value_firm,
+)
 
 # (field, label, unit, editable in a what-if)
 ASSUMPTIONS = [
@@ -73,6 +80,30 @@ def to_out(job_id: UUID, valuation: Valuation, result: dict | None = None, *, ov
     )
 
 
+def price_check(inputs: DcfInputs, out: ValuationOut, price: Decimal) -> PriceCheckOut:
+    value = out.value_per_share
+    low, high = out.range_low or value, out.range_high or value
+    position = "below_range" if price < low else "above_range" if price > high else "within_range"
+    implied = implied_high_growth(inputs, price)
+    growth = next((a.value for a in out.assumptions if a.key == "high_growth"), None)
+    years = next((int(a.value) for a in out.assumptions if a.key == "high_growth_years"), None)
+    gap = value / price - 1
+    if position == "below_range":
+        lead = f"The price is below the estimate range: on these assumptions the shares look undervalued by about {gap:.0%}."
+    elif position == "above_range":
+        lead = f"The price is above the estimate range: on these assumptions the shares look overvalued (estimate {-gap:.0%} below the price)."
+    else:
+        lead = "The price is within the estimate range: on these assumptions the shares look roughly fairly valued."
+    if implied is not None and growth is not None:
+        tail = (f" The price implies {implied:.1%} a year of operating-income growth for {years} years, against "
+                f"{growth:.1%} assumed here; ask whether that is achievable.")
+    else:
+        tail = " No growth rate between 0% and 60% reproduces this price with the other assumptions held."
+    return PriceCheckOut(price=price, value_per_share=value, range_low=out.range_low, range_high=out.range_high,
+                         gap=gap.quantize(Decimal("0.0001")), position=position,
+                         implied_high_growth=implied, explanation=lead + tail)
+
+
 class ValuationService:
     def _load(self, session: Session, job_id: UUID, user_id: UUID) -> Valuation:
         job = session.scalar(select(ResearchJob).where(ResearchJob.id == job_id, ResearchJob.user_id == user_id))
@@ -92,9 +123,13 @@ class ValuationService:
         if valuation.status != "valued":
             raise BadRequestError(f"There is no valuation to vary: {valuation.skip_reason}")
         overrides = request.model_dump(exclude_none=True)
+        price = overrides.pop("market_price", None)
         inputs = apply_overrides(DcfInputs.from_json(valuation.inputs), overrides)
         try:
             result = value_firm(inputs)
+            out = to_out(job_id, valuation, result, overridden=sorted(overrides)) if overrides else to_out(job_id, valuation)
+            if price is not None:
+                out.price_check = price_check(inputs, out, price)
         except (InvalidAssumptions, ValuationSkipped) as exc:
             raise BadRequestError(str(exc)) from exc
-        return to_out(job_id, valuation, result, overridden=sorted(overrides))
+        return out

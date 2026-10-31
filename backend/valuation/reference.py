@@ -98,3 +98,22 @@ def synthetic_rating(ebit: Decimal, interest_expense: Decimal | None, revenue: D
             return SyntheticRating(coverage=coverage, rating=rating, spread=Decimal(spread), table=name)
     floor, rating, spread = table[-1]
     return SyntheticRating(coverage=coverage, rating=rating, spread=Decimal(spread), table=name)
+
+
+# R&D amortisable life by industry (Damodaran's guidance: light ~3 years, medium ~5, heavy ~10). Capitalised only when
+# R&D is material (at least RD_MATERIALITY of revenue).
+RD_MATERIALITY = Decimal("0.01")
+DEFAULT_RD_LIFE = 5
+RD_LIFE: dict[str, int] = {
+    "Software (System & Application)": 3, "Software (Internet)": 3, "Software (Entertainment)": 3,
+    "Computer Services": 3, "Information Services": 3, "Heathcare Information and Technology": 3,
+    "Semiconductor": 5, "Semiconductor Equip": 5, "Computers/Peripherals": 5, "Electronics (General)": 5,
+    "Electronics (Consumer & Office)": 5, "Telecom. Equipment": 5, "Auto & Truck": 5, "Auto Parts": 5,
+    "Aerospace/Defense": 10, "Drugs (Pharmaceutical)": 10, "Drugs (Biotechnology)": 10, "Healthcare Products": 10,
+    "Chemical (Specialty)": 5, "Chemical (Diversified)": 5,
+}
+
+# Competitive-advantage rules for the default phases (ADR 0011). All visible and editable in a what-if.
+STRONG_ADVANTAGE_SPREAD = Decimal("0.10")  # ROC beats the cost of capital by 10+ points
+LONG_HIGH_GROWTH_YEARS = 10
+STABLE_ROC_CAP = Decimal("0.25")
