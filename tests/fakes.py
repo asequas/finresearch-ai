@@ -164,6 +164,7 @@ class ScriptedResearcher(BaseChatModel):
     fail_once: str | None = None
     failed: set = Field(default_factory=set)
     on_call: Any = None
+    record_usage: bool = False  # write ledger rows like the real model, to test cost attribution
 
     @property
     def _llm_type(self) -> str:
@@ -188,6 +189,10 @@ class ScriptedResearcher(BaseChatModel):
             call = self.finish(results[-1].content)
         message = AIMessage(content="", tool_calls=[{**call, "id": f"call_{uuid.uuid4().hex[:8]}", "type": "tool_call"}])
         message.usage_metadata = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+        if self.record_usage:
+            from backend.llm.chat import record_chat_usage
+
+            record_chat_usage("gemini-3.5-flash-lite", message)
         return ChatResult(generations=[ChatGeneration(message=message)])
 
 

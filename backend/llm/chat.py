@@ -5,6 +5,7 @@ tool loops need a LangChain chat model: it carries Gemini 3's thought signatures
 into `create_agent` middleware. Both share the process-wide pacing and map provider failures onto the job
 queue's error types, so a 429 inside a researcher backs the job off exactly like one in the drafting step.
 """
+import functools
 from dataclasses import dataclass, field
 
 from langchain.agents.middleware import AgentMiddleware, ModelFallbackMiddleware
@@ -12,7 +13,10 @@ from langchain_core.exceptions import ModelAuthenticationError, ModelPermissionD
 from langchain_core.language_models import BaseChatModel
 
 from backend.core.config import settings
-from backend.llm.client import GEMINI_THROTTLE
+from backend.costs.budget import ensure_budget
+from backend.costs.ledger import record_call
+from backend.llm.client import GEMINI_THROTTLE, retry_delay_seconds
+from backend.llm.pacing import COOLDOWN, DEFAULT_COOLDOWN_SECONDS, OVERLOAD_COOLDOWN_SECONDS, PACER
 from backend.pipeline.base import (
     CancelRequested,
     LeaseLost,
@@ -54,9 +58,49 @@ class GeminiGuard(AgentMiddleware):
             raise mapped from exc
 
 
-def _gemini(model: str) -> BaseChatModel:
+class ModelCoolingDown(ProviderBusyError):
+    """Raised without a network call when a model is in cool-down, so the fallback chain moves on at once."""
+
+
+def record_chat_usage(model: str, message) -> None:
+    usage = getattr(message, "usage_metadata", None) or {}
+    details_in = usage.get("input_token_details") or {}
+    details_out = usage.get("output_token_details") or {}
+    record_call(
+        model=model, operation="generate", input_tokens=usage.get("input_tokens", 0),
+        cached_tokens=details_in.get("cache_read", 0) or 0, output_tokens=usage.get("output_tokens", 0),
+        thinking_tokens=details_out.get("reasoning", 0) or 0, estimated=not usage,
+    )
+
+
+@functools.cache
+def _paced_class():
+    """ChatGoogleGenerativeAI that checks the budget, honours cool-downs and pacing, and records every response."""
     from langchain_google_genai import ChatGoogleGenerativeAI
 
+    class PacedGemini(ChatGoogleGenerativeAI):
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            ensure_budget()
+            if (wait := COOLDOWN.remaining(self.model)) > 0:
+                raise ModelCoolingDown(f"{self.model} is cooling down for {wait:.0f}s after a rate limit.")
+            PACER.acquire(self.model)
+            try:
+                result = super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+            except Exception as exc:
+                code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+                if code == 429:
+                    COOLDOWN.cool(self.model, retry_delay_seconds(exc, DEFAULT_COOLDOWN_SECONDS))
+                elif code in (500, 503, 504):
+                    COOLDOWN.cool(self.model, OVERLOAD_COOLDOWN_SECONDS)
+                raise
+            for generation in result.generations:
+                record_chat_usage(self.model, generation.message)
+            return result
+
+    return PacedGemini
+
+
+def _gemini(model: str) -> BaseChatModel:
     if not settings.gemini_api_key:
         raise PermanentError("GEMINI_API_KEY is not configured. Add it to .env to run research jobs.")
     kwargs = dict(
@@ -68,7 +112,7 @@ def _gemini(model: str) -> BaseChatModel:
     )
     if "lite" not in model:
         kwargs["thinking_level"] = settings.gemini_thinking_level
-    return ChatGoogleGenerativeAI(**kwargs)
+    return _paced_class()(**kwargs)
 
 
 @dataclass

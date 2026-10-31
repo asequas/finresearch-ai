@@ -54,3 +54,26 @@ def test_all_models_down_is_retryable():
 
     with pytest.raises(RetryableError):
         client.generate_json(prompt="p", schema=Out, system="s", strong=True)
+
+
+def test_a_rate_limited_model_is_skipped_until_its_cooldown_ends():
+    client, calls = _client({"strong-a": 429, "strong-b": '{"answer": "ok"}', "strong-c": '{"answer": "ok"}'})
+
+    client.generate_json(prompt="p", schema=Out, system="s", strong=True)
+    client.generate_json(prompt="p", schema=Out, system="s", strong=True)
+
+    # The second call goes straight to strong-b instead of spending a round trip on a guaranteed 429.
+    assert calls == ["strong-a", "strong-b", "strong-b"]
+
+
+def test_when_every_model_is_cooling_the_soonest_is_tried():
+    from backend.llm.pacing import COOLDOWN
+
+    client, calls = _client({"strong-a": '{"answer": "ok"}', "strong-b": 503, "strong-c": 503})
+    COOLDOWN.cool("strong-a", 30)
+    COOLDOWN.cool("strong-b", 60)
+    COOLDOWN.cool("strong-c", 90)
+
+    client.generate_json(prompt="p", schema=Out, system="s", strong=True)
+
+    assert calls == ["strong-a"]
