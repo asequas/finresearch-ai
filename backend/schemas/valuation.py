@@ -72,6 +72,19 @@ class SensitivityOut(BaseModel):
     value_per_share: list[list[Decimal | None]]
 
 
+class PriceCheckOut(BaseModel):
+    """A price the reader entered, set against the valuation. Decision support, not a recommendation."""
+
+    price: Decimal
+    value_per_share: Decimal
+    range_low: Decimal | None
+    range_high: Decimal | None
+    gap: Decimal  # value / price - 1: positive means the estimate is above the price
+    position: str  # "below_range" (price under the estimate range), "within_range", "above_range"
+    implied_high_growth: Decimal | None  # the high-growth rate at which the DCF equals the price
+    explanation: str
+
+
 class ValuationOut(BaseModel):
     job_id: uuid.UUID
     status: str  # valued or skipped
@@ -94,6 +107,7 @@ class ValuationOut(BaseModel):
     warnings: list[str] = []
     what_if: bool = False
     overridden: list[str] = []
+    price_check: PriceCheckOut | None = None
     created_at: datetime
 
 
@@ -108,3 +122,7 @@ class WhatIfRequest(BaseModel):
     stable_return_on_capital: Decimal | None = Field(default=None, ge=Decimal("0.01"), le=Decimal("1"))
     equity_risk_premium: Decimal | None = Field(default=None, ge=Decimal("0.02"), le=Decimal("0.10"))
     debt_to_capital: Decimal | None = Field(default=None, ge=Decimal("0"), le=Decimal("0.80"))
+    market_price: Decimal | None = Field(
+        default=None, gt=Decimal("0"), le=Decimal("1000000"),
+        description="A share price to compare with (typed by the reader; the app fetches no prices).",
+    )

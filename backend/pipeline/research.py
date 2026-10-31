@@ -741,8 +741,8 @@ class Verify:
 
 def build_limitations(session: Session, job_id: UUID) -> list[str]:
     limitations = [
-        "No market price data: the DCF value is an estimate of intrinsic value, not compared with the share price; "
-        "there are no valuation multiples, price targets or returns.",
+        "No market price data: the report doesn't compare the DCF estimate with a share price (enter one in the Valuation "
+        "section to see where it sits); there are no valuation multiples, price targets or returns.",
         "Debt uses reported long-term debt; leases and commercial paper may be excluded.",
     ]
     snapshots = list(session.scalars(select(FinancialSnapshot).where(FinancialSnapshot.research_job_id == job_id)))
@@ -763,9 +763,10 @@ def build_limitations(session: Session, job_id: UUID) -> list[str]:
     valuation = session.scalar(select(Valuation).where(Valuation.research_job_id == job_id))
     if valuation is not None and valuation.status == "valued":
         limitations.append(
-            "The DCF uses industry-average beta and debt ratio (no share price) and diluted weighted shares; it leaves out "
-            "employee options and cross-holdings, and expenses R&D rather than capitalising it, which understates growth "
-            "investment at R&D-heavy companies. Small changes in growth or cost of capital move it a lot (see its sensitivity table)."
+            "The DCF uses industry-average beta and debt ratio (no share price) and diluted weighted shares, leaves out "
+            "employee options and cross-holdings, and rests on judgement calls (how long high growth lasts, how much of "
+            "today's return on capital survives); small changes in growth or cost of capital move it a lot (see its "
+            "sensitivity table and what-if)."
         )
     elif valuation is not None:
         limitations.append(f"No DCF value: {valuation.skip_reason}")

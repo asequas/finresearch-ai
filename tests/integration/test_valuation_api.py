@@ -32,8 +32,8 @@ def test_valuation_shows_value_range_and_every_sourced_assumption(valued_job):
     assumptions = {a["key"]: a for a in body["assumptions"]}
     assert assumptions["risk_free_rate"]["editable"] is False and "Treasury" in assumptions["risk_free_rate"]["source"]
     assert assumptions["high_growth"]["editable"] is True
-    assert assumptions["stable_return_on_capital"]["source"].startswith("= stable cost of capital")
-    assert len(body["projection"]) == 10 and body["bridge"]["value_per_share"] == body["value_per_share"]
+    assert assumptions["stable_return_on_capital"]["source"].startswith("midway between")
+    assert len(body["projection"]) == 15 and body["bridge"]["value_per_share"] == body["value_per_share"]
     assert body["what_if"] is False
 
 
@@ -70,3 +70,24 @@ def test_valuations_are_private_and_missing_ones_are_404(valued_job, make_job):
     assert client.get(f"/api/v1/research/{uuid4()}/valuation").status_code == 404
     company = client.get("/api/v1/companies/WDGT").json()
     assert company["latest_valuation"]["job_id"] == str(valued_job.id)
+
+
+def test_price_check_places_a_typed_price_against_the_range_and_solves_implied_growth(valued_job):
+    client = TestClient(app)
+    url = f"/api/v1/research/{valued_job.id}/valuation/what-if"
+    base = client.get(f"/api/v1/research/{valued_job.id}/valuation").json()
+    value = Decimal(base["value_per_share"])
+
+    cheap = client.post(url, json={"market_price": str(value / 2)}).json()["price_check"]
+    dear = client.post(url, json={"market_price": str(value * 2)}).json()
+    fair = client.post(url, json={"market_price": str(value)}).json()["price_check"]
+
+    assert cheap["position"] == "below_range" and Decimal(cheap["gap"]) > 0 and "undervalued" in cheap["explanation"]
+    assert dear["price_check"]["position"] == "above_range" and "overvalued" in dear["price_check"]["explanation"]
+    assert dear["what_if"] is False and dear["overridden"] == []  # a price alone changes no assumption
+    assert fair["position"] == "within_range"
+    # At the model's own value, the implied growth is the model's growth.
+    model_growth = Decimal(next(a["value"] for a in base["assumptions"] if a["key"] == "high_growth"))
+    assert abs(Decimal(fair["implied_high_growth"]) - model_growth) < Decimal("0.0005")
+    assert Decimal(dear["price_check"]["implied_high_growth"]) > model_growth
+    assert client.post(url, json={"market_price": "0"}).status_code == 422
