@@ -25,6 +25,8 @@ Real research on Amazon, Microsoft and NVIDIA filings, run end to end through th
 | **Report.** The answer first, then summary, financials, scenarios, risks and the evidence ledger. | **Claim inspector.** Every claim opens to the filing passage with the quoted words highlighted. |
 | ![Company workspace](docs/screenshots/company.png) | ![Phone](docs/screenshots/phone-report.png) |
 | **Company workspace.** Five years of reported figures and every report on the company. | **Phone.** The same report, laid out for a small screen. |
+| ![Costs](docs/screenshots/costs.png) | |
+| **Costs.** Every model call priced from its token counts, against daily and monthly caps; by day, model, stage and job. | |
 
 ## What makes it trustworthy
 
@@ -35,6 +37,9 @@ Real research on Amazon, Microsoft and NVIDIA filings, run end to end through th
 - **Every quote is checked literally** against the stored filing text before a fact-checking model judges the rest.
 - **Every reported figure carries provenance**: XBRL concept, filing accession, filed date and period.
 - **Failures are visible.** Missing data, skipped metrics and unsupported claims appear in the report.
+- **Spend is measured and capped.** Every model call is a priced row in a cost ledger (input, cached, output and
+  thinking tokens at Google's dated list prices); daily and monthly caps stop new work, and the Costs tab shows
+  where the money goes. A research job costs about $0.04–0.11 at paid-tier prices.
 
 ## Architecture
 
@@ -85,7 +90,8 @@ Design decisions, alternatives and failure modes are written up as ADRs in [`doc
 [evidence and provenance model](docs/adr/0005-evidence-and-provenance-model.md) ·
 [pipeline, retrieval and LLM use](docs/adr/0006-research-pipeline-retrieval-and-llm.md) ·
 [retrieval tuning and reranking](docs/adr/0007-retrieval-tuning-and-reranking.md) ·
-[LangGraph research agent](docs/adr/0008-langgraph-research-agent.md).
+[LangGraph research agent](docs/adr/0008-langgraph-research-agent.md) ·
+[LLM cost controls and ledger](docs/adr/0009-llm-cost-controls-and-ledger.md).
 
 Retrieval quality on a 30-question gold set over real filings (ADR 0007):
 
@@ -168,7 +174,8 @@ backend/
   pipeline/       stage runner, ingestion stages, prompts and output schemas
   sources/        SEC EDGAR client, XBRL extraction, filing text parsing
   analysis/       metrics (Decimal), chunking, hybrid retrieval, verification
-  llm/            provider adapter (Gemini) with retry classification
+  llm/            provider adapter (Gemini): retry classification, model cool-downs, pacing
+  costs/          cost ledger, dated price table, spend caps
   worker/         the worker process: claim, heartbeat, retry, release
   evals/          evidence-quality metrics and label scoring
 database/migrations/   Alembic revisions (never edit an applied one)

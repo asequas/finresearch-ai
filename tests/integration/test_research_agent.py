@@ -228,3 +228,17 @@ def test_a_failed_researcher_still_records_its_task(make_job, tmp_path):
 
     failed = [r for r in _runs(job.id, "researching") if r.status == "failed"]
     assert failed and failed[0].extra_metadata["question"] == "How is profitability trending?"
+
+
+def test_every_model_call_lands_in_the_cost_ledger_under_its_job_and_stage(make_job, tmp_path):
+    """Researchers run in LangGraph's worker threads; the job/stage attribution must follow them there."""
+    from backend.models import LlmCall
+
+    job = make_job(ticker="WDGT")
+    _worker(tmp_path, ScriptedResearcher(record_usage=True)).run_once()
+
+    with SessionLocal() as session:
+        calls = list(session.scalars(select(LlmCall).where(LlmCall.research_job_id == job.id)))
+    researcher_calls = [c for c in calls if c.stage == "researching"]
+    assert len(researcher_calls) == 2 * 3  # 3 researchers (2 planned + 1 revision) × (search turn + findings turn)
+    assert all(c.source == "job" and c.cost_usd is not None for c in researcher_calls)

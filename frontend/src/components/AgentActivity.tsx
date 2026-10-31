@@ -2,7 +2,9 @@ import { useEffect } from "react";
 
 import type { Researcher, ToolCall, Trace } from "../api/client";
 import { useTrace } from "../api/client";
-import { SECTION_LABEL, duration } from "../lib/format";
+import { Link } from "react-router-dom";
+
+import { SECTION_LABEL, duration, money } from "../lib/format";
 import { CheckIcon, CrossIcon } from "./icons";
 import { Bar, Empty, ErrorBlock, Pill, Panel } from "./ui";
 
@@ -141,7 +143,10 @@ export function AgentActivity({ jobId, live }: { jobId: string; live: boolean })
   }, [ready]);
 
   const aside = data && data.mode === "agent" && (
-    <span className="num">{data.totals.researchers} agents, {data.totals.tool_calls} tool calls{data.totals.revisions ? `, ${data.totals.revisions} revision` : ""}</span>
+    <span className="num">
+      {data.totals.researchers} agents, {data.totals.tool_calls} tool calls{data.totals.revisions ? `, ${data.totals.revisions} revision` : ""},{" "}
+      <Link to="/costs" className="hover:text-ink hover:underline" title="List price of every model call this job made">{money(data.totals.cost_usd)}</Link>
+    </span>
   );
 
   return (

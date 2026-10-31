@@ -23,6 +23,25 @@ export function usd(value: string | number | null | undefined, opts: { compact?:
   return `${sign}$${abs.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: abs < 100 ? 2 : 0 })}`;
 }
 
+/** API spend: small amounts need sub-cent precision ("$0.0401"); a dollar or more reads in cents ("$1.27"). */
+export function money(value: string | number | null | undefined): string {
+  const n = toNumber(value);
+  if (n === null) return DASH;
+  if (n === 0) return "$0.00";
+  const abs = Math.abs(n);
+  if (abs < 0.0001) return `${n < 0 ? "-" : ""}<$0.0001`;
+  const digits = abs >= 1 ? 2 : abs >= 0.01 ? 3 : 4;
+  return `${n < 0 ? "-" : ""}$${abs.toFixed(digits)}`;
+}
+
+/** Token counts: "8,412", "521.5k", "1.20M". */
+export function tokens(value: number | null | undefined): string {
+  if (value === null || value === undefined) return DASH;
+  if (value >= 1e6) return `${(value / 1e6).toFixed(2)}M`;
+  if (value >= 1e4) return `${(value / 1e3).toFixed(1)}k`;
+  return value.toLocaleString("en-US");
+}
+
 /** Axis ticks: "$300B", "$1.5T", "$25M"; no trailing decimals. */
 export function usdTick(value: number): string {
   const sign = value < 0 ? "-" : "";
