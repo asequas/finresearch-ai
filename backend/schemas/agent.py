@@ -41,8 +41,9 @@ class ResearcherOut(BaseModel):
 
 class RoundOut(BaseModel):
     revision: int
+    restored: bool = False  # a re-check after putting back an earlier, better-verified draft
     verdicts: dict[str, int] = {}
-    decision: str | None = None  # the critic's: "revise" or "finish"
+    decision: str | None = None  # the critic's: "revise", "restore" or "finish"
     reason: str | None = None
     gaps: list[dict] = []
 

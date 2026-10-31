@@ -105,14 +105,18 @@ function Critic({ round }: { round: Trace["rounds"][number] }) {
   return (
     <div className="mx-6 my-3 rounded-[6px] bg-raised px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="font-medium">Fact-check{round.revision > 0 ? ` after revision ${round.revision}` : ""}</span>
+        <span className="font-medium">
+          {round.restored ? "Fact-check of the restored draft" : `Fact-check${round.revision > 0 ? ` after revision ${round.revision}` : ""}`}
+        </span>
         <Verdicts counts={round.verdicts} />
       </div>
       {round.decision && (
         <p className="mt-2 text-soft">
           {round.decision === "revise"
             ? `Sent ${round.gaps.length} ${round.gaps.length === 1 ? "item" : "items"} back for more research (${round.reason}).`
-            : `Moved on to writing the report: ${round.reason}.`}
+            : round.decision === "restore"
+              ? `The revision made things worse, so it was undone: ${round.reason}.`
+              : `Moved on to writing the report: ${round.reason}.`}
         </p>
       )}
     </div>
@@ -155,12 +159,12 @@ export function AgentActivity({ jobId, live }: { jobId: string; live: boolean })
             </ol>
             {[...new Set(data.researchers.map((r) => r.round))].sort().map((round) => {
               const lanes = data.researchers.filter((r) => r.round === round);
-              const critic = data.rounds.find((r) => r.revision === round);
+              const checks = data.rounds.filter((r) => r.revision === round);
               return (
                 <section key={round} aria-label={round === 0 ? "Researchers" : `Revision ${round}`}>
                   <RoundHeading round={round} count={lanes.length} />
                   <ul>{lanes.map((r) => <Lane key={`${r.task_id}-${r.round}`} researcher={r} />)}</ul>
-                  {critic && <Critic round={critic} />}
+                  {checks.map((check) => <Critic key={`${check.revision}-${check.restored}`} round={check} />)}
                 </section>
               );
             })}

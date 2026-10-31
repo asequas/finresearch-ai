@@ -43,12 +43,13 @@ class AgentTraceService:
             latest[(r.task_id, r.round)] = r
         researchers = list(latest.values())
 
-        rounds: dict[int, RoundOut] = {}
+        rounds: dict[tuple[int, bool], RoundOut] = {}
         for run in runs:
             meta = run.extra_metadata or {}
             if run.status != "completed" or "revision" not in meta:
                 continue
-            entry = rounds.setdefault(meta["revision"], RoundOut(revision=meta["revision"]))
+            restored = bool(meta.get("restored"))
+            entry = rounds.setdefault((meta["revision"], restored), RoundOut(revision=meta["revision"], restored=restored))
             if run.agent_name == "verifying":
                 entry.verdicts = meta.get("verdicts", {})
             elif run.agent_name == "critic":
