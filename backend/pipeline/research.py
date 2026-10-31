@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -322,46 +322,41 @@ class ComputeMetrics:
         }
 
 
-# ---- 4b. Value (DCF) --------------------------------------------------------
+# ---- 4b. Value (fair value blend) ------------------------------------------
 
-DCF_METRIC_PREFIX = "dcf_"
+VALUATION_METRIC_PREFIXES = ("val_", "dcf_")  # dcf_ = the retired v1 model's metrics, removed on revalue
 
 
-def dcf_metrics(inputs, result: dict, period: str) -> list[dict]:
+def valuation_metrics(inputs, result: dict, period: str) -> list[dict]:
     """The valuation's headline numbers as calculated metrics, so claims can cite them and the verifier checks them."""
-    from backend.valuation.dcf import CALCULATION_VERSION
-
-    bridge, derived = result["bridge"], result["derived"]
+    from backend.valuation.fair_value import CALCULATION_VERSION
 
     def inp(name: str, value, unit: str = "USD") -> dict:
         return {"name": name, "value": str(value), "period": period, "unit": unit}
 
+    cost = result["cost_of_capital"]
     rows = [
-        ("dcf_value_per_share", "DCF value per share", bridge["value_per_share"], "USD/share",
-         "equity value ÷ diluted shares",
-         {"equity_value": inp("dcf_equity_value", bridge["equity_value"]), "shares": inp("diluted_shares", bridge["shares"], "shares")}),
-        ("dcf_equity_value", "DCF equity value", bridge["equity_value"], "USD",
-         "operating value + cash + short-term investments − debt − minority interest",
-         {k: inp(k, bridge[v]) for k, v in [("operating_value", "operating_value"), ("cash", "cash"),
-                                            ("short_term_investments", "non_operating_assets"), ("debt", "debt"),
-                                            ("minority_interest", "minority_interest")]}),
-        ("dcf_operating_value", "DCF operating value", bridge["operating_value"], "USD",
-         "present value of free cash flows to the firm + present value of the terminal value",
-         {"pv_fcff": inp("pv_fcff", bridge["present_value_of_fcff"]), "pv_terminal": inp("pv_terminal", bridge["present_value_of_terminal"])}),
-        ("dcf_cost_of_capital", "DCF cost of capital", derived["cost_of_capital"], "ratio",
+        ("val_fair_value", "Fair value per share", result["fair_value"], "USD/share",
+         "mean of the methods that apply: cash-flow DCF and earnings power value",
+         {k: inp(f"val_{k}_value", result[k]["value_per_share"], "USD/share") for k in ("dcf", "epv") if result.get(k)}),
+        ("val_cost_of_capital", "Cost of capital", cost["cost_of_capital"], "ratio",
          "E/V × (Rf + β × ERP) + D/V × (Rf + default spread) × (1 − marginal tax)",
-         {"risk_free_rate": inp("risk_free_rate", inputs.risk_free_rate, "ratio"), "levered_beta": inp("levered_beta", derived["levered_beta"], "number"),
-          "equity_risk_premium": inp("equity_risk_premium", inputs.equity_risk_premium, "ratio"),
-          "debt_to_capital": inp("debt_to_capital", inputs.debt_to_capital, "ratio"), "default_spread": inp("default_spread", inputs.default_spread, "ratio")}),
-        ("dcf_high_growth", "DCF high-growth rate", inputs.high_growth, "ratio", inputs.sources.get("high_growth", "assumption"),
-         {"reinvestment_rate": inp("reinvestment_rate", derived["reinvestment_rate"], "ratio"),
-          "return_on_capital": inp("return_on_capital", inputs.return_on_capital, "ratio")}),
-        ("dcf_stable_growth", "DCF stable growth rate", inputs.stable_growth, "ratio", inputs.sources.get("stable_growth", "assumption"),
-         {"risk_free_rate": inp("risk_free_rate", inputs.risk_free_rate, "ratio")}),
-        ("dcf_terminal_share", "Terminal value share of DCF value", result["terminal"]["share_of_operating_value"], "ratio",
-         "present value of the terminal value ÷ operating value",
-         {"pv_terminal": inp("pv_terminal", bridge["present_value_of_terminal"]), "operating_value": inp("operating_value", bridge["operating_value"])}),
+         {"risk_free_rate": inp("risk_free_rate", inputs.risk_free_rate, "ratio"),
+          "levered_beta": inp("levered_beta", cost["levered_beta"], "number"),
+          "equity_risk_premium": inp("equity_risk_premium", inputs.equity_risk_premium, "ratio")}),
+        ("val_growth", "Growth assumed (revenue record)", inputs.initial_growth, "ratio",
+         inputs.sources.get("initial_growth", "assumption"), {}),
     ]
+    if result.get("dcf"):
+        dcf = result["dcf"]
+        rows.append(("val_dcf_value", "Cash-flow DCF value per share", dcf["value_per_share"], "USD/share",
+                     "(PV of projected free cash flow + PV of terminal value + cash − debt) ÷ diluted shares",
+                     {"base_fcf": inp("base_fcf", inputs.base_fcf), "enterprise_value": inp("enterprise_value", dcf["enterprise_value"])}))
+    if result.get("epv"):
+        epv = result["epv"]
+        rows.append(("val_epv_value", "Earnings power value per share", epv["value_per_share"], "USD/share",
+                     "(normalised after-tax operating income ÷ cost of capital + cash − debt) ÷ diluted shares",
+                     {"nopat": inp("normalised_after_tax_operating_income", epv["normalised_after_tax_operating_income"])}))
     return [
         dict(metric_key=key, label=label, period=period, value=Decimal(str(value)), unit=unit, formula=formula,
              inputs=metric_inputs, calculation_version=CALCULATION_VERSION)
@@ -371,8 +366,8 @@ def dcf_metrics(inputs, result: dict, period: str) -> list[dict]:
 
 @dataclass
 class Valuate:
-    """Deterministic DCF intrinsic value (ADR 0010). No model calls; when a company can't be valued this way the
-    valuation is stored as skipped, with the reason, and the job carries on."""
+    """Deterministic fair value (ADR 0012): cash-flow DCF + earnings power value. No model calls; when a company
+    can't be valued the valuation is stored as skipped, with the reason, and the job carries on."""
 
     services: Services
     name: ResearchStage = ResearchStage.VALUING
@@ -390,9 +385,9 @@ class Valuate:
 
 
 def compute_valuation(session: Session, job_id: UUID, risk_free) -> tuple[dict, list[dict]]:
-    """The job's default DCF from its stored snapshots: (valuations row values, dcf_* metric rows). Pure reads."""
+    """The job's default fair value from its stored snapshots: (valuations row values, val_* metric rows). Pure reads."""
     from backend.valuation.assumptions import default_inputs
-    from backend.valuation.dcf import InvalidAssumptions, ValuationSkipped, value_firm
+    from backend.valuation.fair_value import CALCULATION_VERSION, InvalidAssumptions, ValuationSkipped, value
 
     snapshots = sorted(
         session.scalars(select(FinancialSnapshot).where(FinancialSnapshot.research_job_id == job_id)),
@@ -404,23 +399,24 @@ def compute_valuation(session: Session, job_id: UUID, risk_free) -> tuple[dict, 
         for s in snapshots
     ]
     shares = snapshots[-1].diluted_shares if snapshots else None
-    values: dict = dict(calculation_version="dcf-1.0", method="fcff_three_stage")
+    values: dict = dict(calculation_version=CALCULATION_VERSION, method="fair_value_blend")
     try:
         inputs, notes = default_inputs(periods, shares=shares, sic=company.sic, risk_free=risk_free)
-        result = value_firm(inputs)
+        result = value(inputs)
     except (ValuationSkipped, InvalidAssumptions) as exc:
         values.update(status="skipped", skip_reason=str(exc), value_per_share=None, equity_value=None,
                       operating_value=None, industry=None, inputs=None, result=None, warnings=[])
         return values, []
+    best = result["dcf"] or result["epv"]
     values.update(
-        status="valued", skip_reason=None, calculation_version=result["calculation_version"],
-        value_per_share=Decimal(result["bridge"]["value_per_share"]), equity_value=Decimal(result["bridge"]["equity_value"]),
-        operating_value=Decimal(result["bridge"]["operating_value"]),
-        industry=inputs.sources["industry"],
-        inputs=result["inputs"], result={k: result[k] for k in ("derived", "projection", "terminal", "bridge", "sensitivity")},
+        status="valued", skip_reason=None, value_per_share=Decimal(result["fair_value"]),
+        equity_value=Decimal(best["equity_value"]), operating_value=Decimal(best["enterprise_value"]),
+        industry=inputs.sources["industry"], inputs=result["inputs"],
+        result={k: result.get(k) for k in ("cost_of_capital", "dcf", "epv", "fair_value", "range_low", "range_high",
+                                            "methods_used", "sensitivity")},
         warnings=notes + result["warnings"],
     )
-    return values, dcf_metrics(inputs, result, f"FY{inputs.base_year}")
+    return values, valuation_metrics(inputs, result, f"FY{inputs.base_year}")
 
 
 def save_valuation(session: Session, job_id: UUID, ticker: str, values: dict, metrics: list[dict]) -> None:
@@ -432,7 +428,8 @@ def save_valuation(session: Session, job_id: UUID, ticker: str, values: dict, me
         .on_conflict_do_update(index_elements=["research_job_id"], set_={**values, "created_at": now})
     )
     session.execute(delete(CalculatedMetric).where(
-        CalculatedMetric.research_job_id == job_id, CalculatedMetric.metric_key.startswith(DCF_METRIC_PREFIX)
+        CalculatedMetric.research_job_id == job_id,
+        or_(*(CalculatedMetric.metric_key.startswith(prefix) for prefix in VALUATION_METRIC_PREFIXES)),
     ))
     for metric in metrics:
         session.add(CalculatedMetric(research_job_id=job_id, ticker=ticker, fiscal_year=None, **metric))
@@ -741,8 +738,8 @@ class Verify:
 
 def build_limitations(session: Session, job_id: UUID) -> list[str]:
     limitations = [
-        "No market price data: the report doesn't compare the DCF estimate with a share price (enter one in the Valuation "
-        "section to see where it sits); there are no valuation multiples, price targets or returns.",
+        "The written report doesn't compare its fair value with the share price; the Valuation section does, using a "
+        "15-minute delayed quote. There are no valuation multiples or price targets.",
         "Debt uses reported long-term debt; leases and commercial paper may be excluded.",
     ]
     snapshots = list(session.scalars(select(FinancialSnapshot).where(FinancialSnapshot.research_job_id == job_id)))
@@ -763,13 +760,16 @@ def build_limitations(session: Session, job_id: UUID) -> list[str]:
     valuation = session.scalar(select(Valuation).where(Valuation.research_job_id == job_id))
     if valuation is not None and valuation.status == "valued":
         limitations.append(
-            "The DCF uses industry-average beta and debt ratio (no share price) and diluted weighted shares, leaves out "
-            "employee options and cross-holdings, and rests on judgement calls (how long high growth lasts, how much of "
-            "today's return on capital survives); small changes in growth or cost of capital move it a lot (see its "
-            "sensitivity table and what-if)."
+            "Fair value blends a cash-flow DCF (growth from the revenue record) with earnings power value (no growth); it "
+            "uses industry-average beta and debt ratio and diluted weighted shares, and leaves out employee options and "
+            "cross-holdings. Small changes in growth or cost of capital move the DCF a lot (see its sensitivity table and what-if)."
         )
     elif valuation is not None:
-        limitations.append(f"No DCF value: {valuation.skip_reason}")
+        limitations.append(f"No fair value: {valuation.skip_reason}")
+    limitations.append(
+        "The written report uses no market price data, so it makes no price, return or market-multiple claims; the "
+        "valuation view compares the fair value with a delayed quote (or a price you enter) when you open it."
+    )
     unsupported = session.scalar(
         select(Claim.id).where(Claim.research_job_id == job_id, Claim.verification_status == "unsupported").limit(1)
     )
