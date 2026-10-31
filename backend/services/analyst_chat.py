@@ -21,10 +21,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.agent.context import CompactToolResults
 from backend.agent.tools import ToolContext, build_tools, resolve_handles
 from backend.analysis.rerank import Reranker, get_reranker
 from backend.analysis.verification import quote_in_source, snap_quote
 from backend.core.config import settings
+from backend.costs.budget import BudgetExceeded, budget_status
+from backend.costs.ledger import usage_scope
 from backend.llm.chat import AgentModel, gemini_agent_model
 from backend.llm.client import LLMClient, get_llm_client
 from backend.models.claim import Claim
@@ -112,6 +115,8 @@ class AnalystChatService:
         )
         if asked >= settings.chat_max_turns:
             raise LimitReachedError(f"This report has used its {settings.chat_max_turns} questions.")
+        if settings.gemini_billing == "paid" and (reason := budget_status(session).blocked_reason):
+            raise LimitReachedError(reason)
         history = list(session.scalars(
             select(ReportChatMessage).where(ReportChatMessage.research_job_id == job_id)
             .order_by(ReportChatMessage.created_at.desc(), ReportChatMessage.role).limit(HISTORY_TURNS * 2)
@@ -124,7 +129,10 @@ class AnalystChatService:
             llm=self.llm_factory(), reranker=self.reranker_factory(),
         )
         try:
-            answer, model_name = self._run_agent(job, report, tool_ctx, history, question)
+            with usage_scope(job_id=job_id, source="chat", stage="chat"):
+                answer, model_name = self._run_agent(job, report, tool_ctx, history, question)
+        except BudgetExceeded as exc:
+            raise LimitReachedError(str(exc)) from exc
         except ProviderBusyError as exc:
             raise UpstreamBusyError(f"{exc} Try again in a minute.") from exc
         except (RetryableError, PermanentError) as exc:
@@ -160,6 +168,7 @@ class AnalystChatService:
             agent_model.model, tools,
             system_prompt=SYSTEM.format(company=job.company, ticker=job.ticker, tool_calls=settings.chat_tool_calls),
             middleware=[
+                CompactToolResults(),
                 *agent_model.middleware,
                 ToolCallLimitMiddleware(run_limit=settings.chat_tool_calls, exit_behavior="continue"),
                 ModelCallLimitMiddleware(run_limit=settings.chat_tool_calls + 2, exit_behavior="end"),
