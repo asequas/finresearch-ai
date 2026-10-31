@@ -7,7 +7,9 @@ Follows Damodaran, *Damodaran on Valuation* (2nd ed.), ch. 2 "Intrinsic Valuatio
     cost of capital = E/V × (Rf + β_L × ERP) + D/V × (Rf + default spread)(1 - t_marginal)
     β_L             = β_unlevered × (1 + (1 - t_marginal) × D/E)
     terminal value  = FCFF_{n+1} / (cost of capital_stable - g_stable),  g_stable ≤ Rf
-    equity          = operating value + cash + non-operating assets - debt - leases - minority interest - options
+    equity          = operating value + cash + non-operating assets - debt - minority interest - options
+                      (operating leases stay in operating income, so they aren't subtracted again; the field exists for
+                      callers that capitalise leases and adjust EBIT)
 
 Three phases: high growth, a linear transition (growth, reinvestment, cost of capital and tax move to their stable
 values) and stable growth. Pure functions over Decimal; nothing here does I/O or calls a model.
@@ -271,10 +273,10 @@ def _nwc(p: FinancialPeriod) -> Decimal | None:
 
 
 def _invested_capital(p: FinancialPeriod) -> Decimal | None:
+    """Equity + debt − cash. Operating leases stay out: their cost is inside operating income (consistent with EBIT)."""
     if p.stockholders_equity is None:
         return None
-    return (p.stockholders_equity + (p.debt or 0) + (p.lease_liabilities or 0)
-            - (p.cash or 0) - (p.short_term_investments or 0))
+    return p.stockholders_equity + (p.debt or 0) - (p.cash or 0) - (p.short_term_investments or 0)
 
 
 def effective_tax_rate(p: FinancialPeriod, marginal: Decimal) -> tuple[Decimal, str]:
