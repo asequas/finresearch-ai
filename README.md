@@ -99,7 +99,8 @@ Design decisions, alternatives and failure modes are written up as ADRs in [`doc
 [LLM cost controls and ledger](docs/adr/0009-llm-cost-controls-and-ledger.md) ·
 [DCF intrinsic value](docs/adr/0010-dcf-intrinsic-value.md) ·
 [valuation v2: R&D, advantage, price check](docs/adr/0011-valuation-v2-rd-advantage-price-check.md) ·
-[fair-value blend and delayed price](docs/adr/0012-fair-value-blend-and-delayed-price.md).
+[fair-value blend and delayed price](docs/adr/0012-fair-value-blend-and-delayed-price.md) ·
+[CI/CD and single-host deploy](docs/adr/0013-ci-cd-and-single-host-deploy.md).
 
 Retrieval quality on a 30-question gold set over real filings (ADR 0007):
 
@@ -147,6 +148,23 @@ GEMINI_API_KEY=<free key from https://aistudio.google.com/apikey>
 SEC_USER_AGENT=FinResearch AI <your contact email>       # SEC EDGAR requires a contact address
 # PIPELINE=stub                                          # run the queue with fake stages, no external calls
 ```
+
+## Deploy
+
+CI builds the production images for x86 and ARM, boots the full stack from them, and runs a research job through
+nginx before anything ships. On `main` the tested images go to GHCR, and the Deploy workflow ships them to one
+server over SSH: migrate, restart, smoke test, automatic rollback ([ADR 0013](docs/adr/0013-ci-cd-and-single-host-deploy.md)).
+
+On the server (any Docker host; Oracle Cloud's free Arm VM is enough):
+
+```bash
+mkdir ~/finresearch && cd ~/finresearch
+# copy deploy/.env.example to .env and fill it in (POSTGRES_PASSWORD, GEMINI_API_KEY, SEC_USER_AGENT)
+```
+
+In GitHub, create the `production` environment with secrets `DEPLOY_HOST`, `DEPLOY_USER` and `DEPLOY_SSH_KEY`, then
+set the repository variable `DEPLOY_ENABLED=true`. The next green `main` deploys; run the Deploy workflow by hand
+with an older `sha-…` tag to roll back.
 
 ## Tests
 

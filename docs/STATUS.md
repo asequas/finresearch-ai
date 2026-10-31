@@ -1,6 +1,6 @@
 # FinResearch AI: Status
 
-Last updated: 2026-11-01 (after the fair-value blend, ADR 0012).
+Last updated: 2026-11-01 (after CI/CD, ADR 0013).
 Labels: **verified** = demonstrated by a test or a command this session; **unverified** = built, not yet demonstrated
 against real external services; **proposed** = not built.
 
@@ -82,11 +82,13 @@ misleading cancel copy; quote highlight missing for table rows.
 | D4 | Low | Debt uses reported long-term debt only; stated in every report's limitations. |
 | D5 | Low | No structured logging beyond stdlib. (Per-call cost tracking and caps: done, ADR 0009.) |
 | D6 | Low | Development identity: every request is `dev@finresearch.local`. Ownership checks exist; authentication doesn't. |
+| D10 | Medium | CI/CD (ADR 0013) is *implemented but unverified* until its first CI run: the image builds, the multi-arch publish and the compose smoke test have only been checked locally (YAML, `nginx -t`, `docker compose config`), and the SSH deploy has no server yet. |
 
 ## Current phase + next 3 tasks
 
 Phases 1–5b: built and verified on real data. Phase 6: fair value + delayed price built; peer comparison deferred. Phase 7 (deploy):
-CI added; deployment and auth deferred by decision.
+CI/CD built (ADR 0013): images for amd64 and arm64, a smoke-tested stack, GHCR, and an SSH deploy with rollback,
+off until a server is configured. Auth deferred by decision.
 
 1. Link billing (Tier 1), set `GEMINI_BILLING=paid`, then tune agent concurrency and budgets against latency; re-run AAPL. *proposed*
 2. Human-label claims from the real reports and score citation correctness against the 95% target. *proposed*

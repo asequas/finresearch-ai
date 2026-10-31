@@ -157,3 +157,14 @@ Write your answer, then compare it with [ADR 0001](adr/0001-postgres-backed-job-
   closes less than half the gap.
 - **Injectable dependencies keep tests offline.** The valuation service takes a price fetcher via FastAPI
   `Depends`, so tests drive "below range" and "above range" without the network.
+
+## CI/CD (ADR 0013)
+
+- **Ship what you tested.** CI boots the production compose file from the images it built and runs a research job
+  through nginx, then pushes exactly those images, tagged by commit ([`ci.yml`](../.github/workflows/ci.yml)).
+- **Native multi-arch builds.** amd64 and arm64 on GitHub's free runners, joined into one tag; the free Oracle VM is ARM.
+- **Migrations before traffic, rollback by tag.** A one-shot `migrate` service gates the API and worker;
+  [`deploy.sh`](../deploy/deploy.sh) smoke-tests and restores the previous tag on failure. This only works if
+  migrations stay backward compatible.
+- **Deploys don't lose jobs.** The worker's SIGTERM release (ADR 0001) and a 70s grace period make restarts safe.
+
