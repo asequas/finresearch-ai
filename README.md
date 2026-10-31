@@ -26,7 +26,7 @@ Real research on Amazon, Microsoft and NVIDIA filings, run end to end through th
 | ![Company workspace](docs/screenshots/company.png) | ![Phone](docs/screenshots/phone-report.png) |
 | **Company workspace.** Five years of reported figures and every report on the company. | **Phone.** The same report, laid out for a small screen. |
 | ![Costs](docs/screenshots/costs.png) | ![Valuation](docs/screenshots/valuation.png) |
-| **Costs.** Every model call priced from its token counts, against daily and monthly caps; by day, model, stage and job. | **Valuation.** A deterministic DCF with every assumption sourced; a typed price is placed against the estimate, with the growth it implies. |
+| **Costs.** Every model call priced from its token counts, against daily and monthly caps; by day, model, stage and job. | **Valuation.** Fair value from a cash-flow DCF and earnings power, every assumption sourced; the delayed price is placed against the range, with the growth it implies. |
 
 ## What makes it trustworthy
 
@@ -37,10 +37,10 @@ Real research on Amazon, Microsoft and NVIDIA filings, run end to end through th
 - **Every quote is checked literally** against the stored filing text before a fact-checking model judges the rest.
 - **Every reported figure carries provenance**: XBRL concept, filing accession, filed date and period.
 - **Failures are visible.** Missing data, skipped metrics and unsupported claims appear in the report.
-- **Intrinsic value is computed, not generated.** A deterministic DCF (Damodaran's FCFF model, tested against his
-  own worked example) values each company from its filings, capitalising R&D and scaling the growth horizon to the
-  company's measured advantage. Every assumption is sourced, dated and editable. Type today's share price and it
-  shows whether the price sits below, within or above the estimate range, and the growth that price implies.
+- **Fair value is computed, not generated.** Two simple methods built from reported numbers (a cash-flow DCF and
+  earnings power value) give a fair value and a range; every assumption is sourced, dated and editable. A free
+  delayed quote (or a price you type) is placed against that range, and a reverse DCF states the growth the price
+  requires next to the company's actual record.
 - **Spend is measured and capped.** Every model call is a priced row in a cost ledger (input, cached, output and
   thinking tokens at Google's dated list prices); daily and monthly caps stop new work, and the Costs tab shows
   where the money goes. A research job costs about $0.04–0.11 at paid-tier prices.
@@ -79,7 +79,7 @@ tool calls live.
 | Fetch filings | deterministic | latest 10-K and any newer 10-Q |
 | Extract financials | deterministic | five fiscal years from XBRL, latest filing wins on restatement |
 | Compute metrics | deterministic | margins, FCF, growth, ROE, leverage, CAGR, each with formula and inputs |
-| Value (DCF) | deterministic | FCFF DCF: industry beta, Treasury 10-year, Damodaran ERP; value per share, range, sensitivity |
+| Fair value | deterministic | cash-flow DCF + earnings power value; industry beta, Treasury 10-year, Damodaran ERP; range, sensitivity |
 | Index filings | deterministic + embeddings | section-aware chunks, `tsvector` + HNSW `vector(768)` |
 | Plan | LLM | 3-6 sub-questions, each with a focus |
 | Research | parallel tool-using agents | each researcher searches (tuned hybrid + local cross-encoder rerank), reads passages and pulls metrics, within a call budget |
@@ -98,7 +98,8 @@ Design decisions, alternatives and failure modes are written up as ADRs in [`doc
 [LangGraph research agent](docs/adr/0008-langgraph-research-agent.md) ·
 [LLM cost controls and ledger](docs/adr/0009-llm-cost-controls-and-ledger.md) ·
 [DCF intrinsic value](docs/adr/0010-dcf-intrinsic-value.md) ·
-[valuation v2: R&D, advantage, price check](docs/adr/0011-valuation-v2-rd-advantage-price-check.md).
+[valuation v2: R&D, advantage, price check](docs/adr/0011-valuation-v2-rd-advantage-price-check.md) ·
+[fair-value blend and delayed price](docs/adr/0012-fair-value-blend-and-delayed-price.md).
 
 Retrieval quality on a 30-question gold set over real filings (ADR 0007):
 
@@ -183,7 +184,7 @@ backend/
   analysis/       metrics (Decimal), chunking, hybrid retrieval, verification
   llm/            provider adapter (Gemini): retry classification, model cool-downs, pacing
   costs/          cost ledger, dated price table, spend caps
-  valuation/      DCF engine, default assumptions, Damodaran reference data, Treasury rate, backfill
+  valuation/      fair-value engine, default assumptions, reference data, Treasury rate, delayed quote, backfill
   worker/         the worker process: claim, heartbeat, retry, release
   evals/          evidence-quality metrics and label scoring
 database/migrations/   Alembic revisions (never edit an applied one)
@@ -193,5 +194,6 @@ docs/                  STATUS.md, ADRs, INTERVIEW_NOTES.md
 
 ## Scope (v1)
 
-US-listed, non-financial companies that file a 10-K, in USD. No market price feed: the DCF gives intrinsic value per
-share, and a price the reader types is placed against it; there are no valuation multiples or price targets. Single development user until authentication (planned with deployment).
+US-listed, non-financial companies that file a 10-K, in USD. Prices come from Cboe's free delayed quote, which is
+licensed for personal, non-commercial use (a commercial deployment needs a licensed feed), or from a price the reader
+types; the written report makes no price claims, and there are no valuation multiples or price targets. Single development user until authentication (planned with deployment).

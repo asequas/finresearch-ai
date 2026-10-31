@@ -41,6 +41,7 @@ VALUATION_MONEY_FIELDS = (
     "short_term_investments",
     "lease_liabilities",
     "minority_interest",
+    "share_based_compensation",
 )
 MONEY_FIELDS = CORE_MONEY_FIELDS + VALUATION_MONEY_FIELDS
 
@@ -112,6 +113,7 @@ class FinancialSnapshot(Base):
     short_term_investments: Mapped[Decimal | None] = _money()
     lease_liabilities: Mapped[Decimal | None] = _money()
     minority_interest: Mapped[Decimal | None] = _money()
+    share_based_compensation: Mapped[Decimal | None] = _money()
 
     eps: Mapped[Decimal | None] = mapped_column(Numeric(20, 6), nullable=True)
     diluted_shares: Mapped[Decimal | None] = mapped_column(Numeric(24, 4), nullable=True)

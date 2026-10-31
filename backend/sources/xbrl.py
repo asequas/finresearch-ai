@@ -49,6 +49,7 @@ FLOW_CONCEPTS: dict[str, tuple[str, ...]] = {
         "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments",
         "IncomeLossFromContinuingOperationsBeforeIncomeTaxesDomestic",
     ),
+    "share_based_compensation": ("ShareBasedCompensation", "AllocatedShareBasedCompensationExpense"),
     "eps": ("EarningsPerShareDiluted",),
     "diluted_shares": ("WeightedAverageNumberOfDilutedSharesOutstanding",),
 }

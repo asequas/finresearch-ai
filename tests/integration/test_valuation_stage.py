@@ -20,35 +20,31 @@ def _run(make_job, tmp_path, responses=RESPONSES):
     return job, services
 
 
-def test_a_completed_job_carries_a_sourced_dcf_valuation_and_citable_metrics(make_job, tmp_path):
+def test_a_completed_job_carries_a_sourced_fair_value_and_citable_metrics(make_job, tmp_path):
     job, _ = _run(make_job, tmp_path)
 
     with SessionLocal() as session:
         assert session.get(ResearchJob, job.id).status == ResearchJobStatus.COMPLETED
         valuation = session.scalar(select(Valuation).where(Valuation.research_job_id == job.id))
         metrics = {m.metric_key: m for m in session.scalars(select(CalculatedMetric).where(
-            CalculatedMetric.research_job_id == job.id, CalculatedMetric.metric_key.startswith("dcf_")))}
+            CalculatedMetric.research_job_id == job.id, CalculatedMetric.metric_key.startswith("val_")))}
         report = session.scalar(select(Report).where(Report.research_job_id == job.id))
 
-    assert valuation.status == "valued" and valuation.value_per_share > 0
-    assert valuation.industry == "Machinery"  # SIC 3560
+    assert valuation.status == "valued" and valuation.method == "fair_value_blend" and valuation.industry == "Machinery"
     inputs = valuation.inputs
     assert inputs["risk_free_rate"] == "0.0450" and "Treasury" in inputs["sources"]["risk_free_rate"]
-    assert inputs["base_ebit"] == "30250000000.0000" and inputs["effective_tax_rate"] == "0.2"  # 6B tax / 30B pre-tax
-    assert "Machinery" in inputs["sources"]["unlevered_beta"] and inputs["sources"]["industry"] == "Machinery"
-    assert inputs["lease_liabilities"] == "0"  # already inside operating income
-    # ROC ~39% vs ~8% cost of capital: a lasting advantage, so 10 high-growth years + 5 transition (ADR 0011).
-    assert inputs["high_growth_years"] == 10 and inputs["sources"]["high_growth_years"].startswith("10: return on capital")
-    assert len(valuation.result["projection"]) == 15 and valuation.result["sensitivity"]["value_per_share"]
-    assert inputs["sources"]["stable_return_on_capital"].startswith("midway between")
-    assert set(metrics) == {"dcf_value_per_share", "dcf_equity_value", "dcf_operating_value", "dcf_cost_of_capital",
-                            "dcf_high_growth", "dcf_stable_growth", "dcf_terminal_share"}
-    assert metrics["dcf_value_per_share"].unit == "USD/share"
-    assert metrics["dcf_value_per_share"].value == valuation.value_per_share
-    assert any("DCF uses industry-average beta" in limitation for limitation in report.limitations)
+    # FY2024 free cash flow: 25B cash from operations + 0.5B × (1 − 20%) interest − 5B capex = 20.4B.
+    assert Decimal(inputs["base_fcf"]) == Decimal(inputs["history"][-1]["fcf"]) == Decimal("20.4e9")
+    assert abs(Decimal(inputs["initial_growth"]) - Decimal("0.10")) < Decimal("0.0001")  # revenue 100B → 121B over two years: 10% a year
+    assert valuation.result["methods_used"] == ["dcf", "epv"]
+    low, high = valuation.result["range_low"], valuation.result["range_high"]
+    assert Decimal(low) <= valuation.value_per_share <= Decimal(high)
+    assert set(metrics) == {"val_fair_value", "val_dcf_value", "val_epv_value", "val_cost_of_capital", "val_growth"}
+    assert metrics["val_fair_value"].unit == "USD/share" and metrics["val_fair_value"].value == valuation.value_per_share
+    assert any("Fair value blends a cash-flow DCF" in limitation for limitation in report.limitations)
 
 
-def test_an_operating_loss_is_recorded_as_skipped_with_its_reason(make_job, tmp_path):
+def test_an_operating_loss_drops_earnings_power_and_keeps_the_cash_flow_method(make_job, tmp_path):
     responses = json.loads(json.dumps(RESPONSES))
     facts = responses[f"https://data.sec.gov/api/xbrl/companyfacts/CIK{CIK}.json"]["facts"]["us-gaap"]
     for fact in facts["OperatingIncomeLoss"]["units"]["USD"]:
@@ -62,10 +58,12 @@ def test_an_operating_loss_is_recorded_as_skipped_with_its_reason(make_job, tmp_
         valuation = session.scalar(select(Valuation).where(Valuation.research_job_id == job.id))
         limitations = build_limitations(session, job.id)
         dcf_count = session.scalar(select(func.count()).select_from(CalculatedMetric).where(
-            CalculatedMetric.research_job_id == job.id, CalculatedMetric.metric_key.startswith("dcf_")))
-    assert valuation.status == "skipped" and "Operating income" in valuation.skip_reason
-    assert dcf_count == 0
-    assert any(limitation.startswith("No DCF value: Operating income") for limitation in limitations)
+            CalculatedMetric.research_job_id == job.id, CalculatedMetric.metric_key == "val_epv_value"))
+    # Losses everywhere: no positive operating income, and FCF (25B − 5B) still positive → DCF alone applies.
+    assert valuation.status == "valued" and valuation.result["methods_used"] == ["dcf"]
+    assert any("earnings power value doesn't apply" in w for w in valuation.warnings)
+    assert dcf_count == 0  # no val_epv_value metric
+    assert not any(limitation.startswith("No fair value") for limitation in limitations)
 
 
 def test_revaluing_replaces_rather_than_duplicates_and_spends_nothing(make_job, tmp_path):
@@ -83,7 +81,7 @@ def test_revaluing_replaces_rather_than_duplicates_and_spends_nothing(make_job, 
     with SessionLocal() as session:
         assert session.scalar(select(func.count()).select_from(Valuation).where(Valuation.research_job_id == job.id)) == 1
         assert session.scalar(select(func.count()).select_from(CalculatedMetric).where(
-            CalculatedMetric.research_job_id == job.id, CalculatedMetric.metric_key == "dcf_value_per_share")) == 1
+            CalculatedMetric.research_job_id == job.id, CalculatedMetric.metric_key == "val_fair_value")) == 1
         assert session.scalar(select(func.count()).select_from(LlmCall)) == 0  # the fakes never reach a model
 
 
@@ -99,7 +97,7 @@ def test_backfill_values_old_jobs_filling_only_missing_facts(make_job, tmp_path)
     job, _ = _run(make_job, tmp_path)
     with SessionLocal() as session:  # make it look like a job from before the DCF existed
         session.execute(delete(Valuation).where(Valuation.research_job_id == job.id))
-        session.execute(delete(CalculatedMetric).where(CalculatedMetric.metric_key.startswith("dcf_")))
+        session.execute(delete(CalculatedMetric).where(CalculatedMetric.metric_key.startswith("val_")))
         for snapshot in session.scalars(select(FinancialSnapshot).where(FinancialSnapshot.research_job_id == job.id)):
             snapshot.depreciation_amortization = snapshot.income_tax_expense = snapshot.pretax_income = None
             snapshot.revenue = snapshot.revenue + 1  # a stored value that must not be overwritten

@@ -138,7 +138,7 @@ export const STAGES: { key: Stage; label: string; detail: string }[] = [
   { key: "fetching_filings", label: "Fetch filings", detail: "Latest 10-K and any newer 10-Q" },
   { key: "extracting_financials", label: "Extract financials", detail: "Five fiscal years from XBRL" },
   { key: "computing_metrics", label: "Compute metrics", detail: "Margins, growth, cash flow, debt ratios" },
-  { key: "valuing", label: "Value (DCF)", detail: "Intrinsic value from the filings, no AI" },
+  { key: "valuing", label: "Fair value", detail: "Fair value from the filings, no AI" },
   { key: "indexing_documents", label: "Index filings", detail: "Sections, chunks, 768-d embeddings" },
   { key: "planning", label: "Plan", detail: "Split the question into sub-questions" },
   { key: "researching", label: "Research", detail: "Parallel agents search filings and metrics" },

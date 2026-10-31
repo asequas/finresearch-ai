@@ -1,43 +1,37 @@
-"""Default DCF assumptions from a company's filings and the reference data, each with its source (ADR 0010)."""
+"""Default fair-value inputs from a company's filings and dated reference data, each with its source (ADR 0012)."""
 from decimal import Decimal
 
 from backend.analysis.metrics import FinancialPeriod
-from backend.valuation.dcf import (
-    DcfInputs,
-    ValuationSkipped,
-    adjusted_operating_income,
-    capital_cost,
-    effective_tax_rate,
-    fundamentals,
-    research_asset,
-)
+from backend.valuation.fair_value import FairValueInputs, ValuationSkipped
 from backend.valuation.industries import industry_for_sic
 from backend.valuation.market import RiskFreeRate
 from backend.valuation.reference import (
     ERP,
     ERP_AS_OF,
-    DEFAULT_RD_LIFE,
     INDUSTRY_DATA_DATE,
-    LONG_HIGH_GROWTH_YEARS,
     MARGINAL_TAX_RATE,
     RATINGS_AS_OF,
-    RD_LIFE,
-    RD_MATERIALITY,
-    STABLE_ROC_CAP,
-    STRONG_ADVANTAGE_SPREAD,
     industries,
     synthetic_rating,
 )
 
-HIGH_GROWTH_YEARS = 5
-TRANSITION_YEARS = 5
-DEFAULT_STABLE_GROWTH = Decimal("0.03")
+GROWTH_YEARS = 5
+FADE_YEARS = 5
+LONG_RUN_GROWTH = Decimal("0.025")  # roughly long-run nominal US growth; never above the risk-free rate
+GROWTH_CAP = Decimal("0.20")
+FCF_YEARS = 3
+
+
+def _tax_rate(p: FinancialPeriod) -> Decimal | None:
+    if p.income_tax_expense is None or not p.pretax_income or p.pretax_income <= 0:
+        return None
+    return min(max(p.income_tax_expense / p.pretax_income, Decimal("0")), MARGINAL_TAX_RATE)
 
 
 def default_inputs(
     periods: list[FinancialPeriod], *, shares: Decimal | None, sic: str | None, risk_free: RiskFreeRate | None,
-) -> tuple[DcfInputs, list[str]]:
-    """Build the base-case inputs. Raises ValuationSkipped with a reader-facing reason when a DCF can't be done."""
+) -> tuple[FairValueInputs, list[str]]:
+    """Build the base-case inputs. Raises ValuationSkipped with a reader-facing reason when nothing can be valued."""
     if risk_free is None:
         raise ValuationSkipped("The risk-free rate (US Treasury 10-year yield) couldn't be fetched and none is cached.")
     periods = sorted(periods, key=lambda p: p.fiscal_year)
@@ -45,98 +39,111 @@ def default_inputs(
         raise ValuationSkipped("No reported financials to value.")
     base = periods[-1]
     fy = f"FY{base.fiscal_year}"
-    if base.operating_income is None or base.operating_income <= 0:
-        raise ValuationSkipped(f"Operating income in {fy} is missing or negative, so free cash flow to the firm can't be projected from it.")
     if not shares or shares <= 0:
         raise ValuationSkipped(f"No diluted share count was reported for {fy}.")
-
     notes: list[str] = []
-    tax, tax_source = effective_tax_rate(base, MARGINAL_TAX_RATE)
+
+    # Tax: the average effective rate across the years we hold, capped at the marginal rate.
+    rates = [r for r in (_tax_rate(p) for p in periods) if r is not None]
+    tax = sum(rates, Decimal("0")) / len(rates) if rates else MARGINAL_TAX_RATE
+    tax_source = (f"average effective tax rate, FY{periods[0].fiscal_year}-{fy} (income tax ÷ pre-tax income)"
+                  if rates else "US marginal rate (effective rate not reported)")
+
+    # Reported free cash flow to the firm, per year.
+    history = []
+    for p in periods:
+        if p.operating_cash_flow is None or p.capital_expenditure is None:
+            continue
+        p_tax = _tax_rate(p) if _tax_rate(p) is not None else tax
+        interest = (p.interest_expense or Decimal("0")) * (1 - p_tax)
+        sbc = p.share_based_compensation or Decimal("0")
+        fcf = p.operating_cash_flow + interest - p.capital_expenditure - sbc
+        margin = fcf / p.revenue if p.revenue and p.revenue > 0 else None
+        history.append({"fiscal_year": p.fiscal_year, "operating_cash_flow": p.operating_cash_flow,
+                        "after_tax_interest": interest, "capital_expenditure": p.capital_expenditure,
+                        "share_based_compensation": sbc, "fcf": fcf, "revenue": p.revenue, "fcf_margin": margin})
+        if p.share_based_compensation is None:
+            notes.append(f"FY{p.fiscal_year}: stock-based compensation not reported, so none is deducted.")
+    # Base FCF: the average FCF margin of recent years applied to the latest revenue. A plain dollar average would
+    # smooth lumpy years too, but drag a fast grower back to old revenue (NVDA: $57B against $91B last year).
+    recent = history[-FCF_YEARS:]
+    margins_fcf = [h["fcf_margin"] for h in recent if h["fcf_margin"] is not None]
+    base_fcf, fcf_margin = None, None
+    if recent and margins_fcf and base.revenue and base.revenue > 0:
+        fcf_margin = sum(margins_fcf, Decimal("0")) / len(margins_fcf)
+        base_fcf = fcf_margin * base.revenue
+    elif recent:
+        base_fcf = sum((h["fcf"] for h in recent), Decimal("0")) / len(recent)
+    else:
+        notes.append("Cash from operations or capex isn't reported, so the cash-flow DCF can't be computed.")
+
+    # Growth: the revenue record (compound annual growth), capped, then faded to the long-run rate.
+    revenues = [p for p in periods if p.revenue and p.revenue > 0]
+    growth = Decimal("0")
+    growth_source = "no usable revenue history; 0% assumed"
+    if len(revenues) >= 2:
+        span = revenues[-1].fiscal_year - revenues[0].fiscal_year
+        raw = (revenues[-1].revenue / revenues[0].revenue) ** (Decimal(1) / Decimal(span)) - 1
+        growth = min(max(raw, Decimal("0")), GROWTH_CAP)
+        growth_source = f"revenue growth FY{revenues[0].fiscal_year}-{fy}: {raw:.1%} a year"
+        if raw > GROWTH_CAP:
+            growth_source += f", capped at {GROWTH_CAP:.0%}"
+            notes.append(f"Revenue grew {raw:.0%} a year; growth that fast rarely lasts, so the forecast uses {GROWTH_CAP:.0%}.")
+        elif raw < 0:
+            growth_source += ", floored at 0%"
+
+    # Earnings power: average operating margin applied to the latest revenue.
+    margins = [p.operating_income / p.revenue for p in periods if p.operating_income is not None and p.revenue and p.revenue > 0]
+    normalised = None
+    if margins and base.revenue:
+        margin = sum(margins, Decimal("0")) / len(margins)
+        normalised = margin * base.revenue if margin > 0 else None
+
     match = industry_for_sic(sic)
     industry = industries()[match.industry]
     if match.fallback:
         notes.append(f"SIC {sic or 'unknown'} has no industry mapping, so market-wide beta and debt ratio are used.")
-
-    # R&D is investment, not an expense, when it is material (Damodaran): capitalise it over the industry's life.
-    research = None
-    if base.research_and_development and base.revenue and base.research_and_development / base.revenue >= RD_MATERIALITY:
-        life = RD_LIFE.get(industry.name, DEFAULT_RD_LIFE)
-        research = research_asset(periods, life)
-        if research and research.estimated_years:
-            notes.append(f"R&D before FY{min(research.spend)} isn't in our data; assumed equal to the earliest year for amortisation.")
-    base_ebit = adjusted_operating_income(base, research)
-    growth = fundamentals(periods, MARGINAL_TAX_RATE, research)
-    notes += growth.notes
-
-    rating = synthetic_rating(base.operating_income, base.interest_expense, base.revenue)
-    rf = risk_free.rate
+    rating = synthetic_rating(base.operating_income or Decimal("0"), base.interest_expense, base.revenue)
     if risk_free.stale:
         notes.append(f"The Treasury yield couldn't be refreshed; using the last cached value from {risk_free.as_of}.")
-    stable_growth = min(DEFAULT_STABLE_GROWTH, rf)
-    high_cost = capital_cost(risk_free=rf, erp=ERP, unlevered_beta=industry.unlevered_beta_cash_corrected,
-                             debt_to_capital=industry.debt_to_capital, default_spread=rating.spread,
-                             marginal_tax=MARGINAL_TAX_RATE).cost_of_capital
-    stable_cost = capital_cost(risk_free=rf, erp=ERP, unlevered_beta=None, levered_beta=Decimal("1.0"),
-                               debt_to_capital=industry.debt_to_capital, default_spread=rating.spread,
-                               marginal_tax=MARGINAL_TAX_RATE).cost_of_capital
-
-    # Reinvestment during high growth = growth / ROC. Without a usable ROC, assume no excess returns (ROC = cost of capital).
-    roc = growth.return_on_capital
-    if roc is None or roc <= 0:
-        roc = high_cost
-        notes.append("Return on capital couldn't be measured, so new investment is assumed to earn its cost of capital.")
-
-    # Competitive advantage (ADR 0011): a wide, measured edge lasts longer and fades rather than vanishing.
-    spread = roc - high_cost
-    high_years = LONG_HIGH_GROWTH_YEARS if spread >= STRONG_ADVANTAGE_SPREAD else HIGH_GROWTH_YEARS
-    stable_roc = None
-    stable_roc_source = "= stable cost of capital (no excess returns forever)"
-    if roc > stable_cost:
-        stable_roc = min(stable_cost + (roc - stable_cost) / 2, STABLE_ROC_CAP)
-        stable_roc_source = (f"midway between return on capital ({roc:.1%}) and stable cost of capital ({stable_cost:.1%}), "
-                             f"capped at {STABLE_ROC_CAP:.0%}: the advantage fades but persists")
-
-    years = f"FY{growth.years[0]}-FY{growth.years[-1]}" if growth.years else fy
+    long_run = min(LONG_RUN_GROWTH, risk_free.rate)
     industry_source = f"Damodaran US industry data ({INDUSTRY_DATA_DATE:%b %Y}): {industry.name}"
     coverage = f"interest coverage {rating.coverage:.1f}x" if rating.coverage is not None else "no interest expense"
+
     sources = {
-        "base_ebit": (f"Operating income, {fy} (SEC XBRL), + R&D {research.life}-year capitalisation adjustment"
-                      if research else f"Operating income, {fy} (SEC XBRL)"),
-        "effective_tax_rate": tax_source,
-        "marginal_tax_rate": "US federal 21% + state (Damodaran's US marginal rate)",
-        "high_growth": f"{growth.method}, {years}",
-        "high_growth_years": (f"{LONG_HIGH_GROWTH_YEARS}: return on capital beats the cost of capital by "
-                              f"{spread:.0%} points (a lasting advantage)" if high_years == LONG_HIGH_GROWTH_YEARS else "default"),
-        "stable_return_on_capital": stable_roc_source,
-        "transition_years": "default (linear fade to stable growth)",
-        "return_on_capital": (f"after-tax operating income ÷ invested capital{' (incl. research asset)' if research else ''}, {fy}"
-                              if growth.return_on_capital else "= cost of capital"),
-        "stable_growth": f"default {DEFAULT_STABLE_GROWTH:.0%}, capped at the risk-free rate",
+        "base_fcf": ((f"average free-cash-flow margin {fcf_margin:.1%}, FY{recent[0]['fiscal_year']}-{fy}, × {fy} revenue"
+                      if fcf_margin is not None else f"average free cash flow, FY{recent[0]['fiscal_year']}-{fy}")
+                     + "; free cash flow = cash from operations + after-tax interest − capex − stock-based compensation")
+                    if recent else "not available",
+        "initial_growth": growth_source,
+        "high_growth_years": "default",
+        "fade_years": "default (straight line to long-run growth)",
+        "stable_growth": f"long-run US nominal growth, {LONG_RUN_GROWTH:.1%} (never above the risk-free rate)",
+        "normalised_operating_income": (f"average operating margin {sum(margins, Decimal('0')) / len(margins):.1%} "
+                                        f"× {fy} revenue") if normalised else "not available (losses)",
+        "tax_rate": tax_source,
         "risk_free_rate": f"US Treasury 10-year par yield, {risk_free.as_of:%b %d, %Y}",
         "equity_risk_premium": f"Damodaran implied ERP, {ERP_AS_OF:%b %d, %Y}",
         "unlevered_beta": f"{industry_source} (unlevered, cash-corrected, {industry.firms} firms)",
         "debt_to_capital": f"{industry_source} (market D/E {industry.de_ratio:.2f})",
         "default_spread": f"synthetic rating {rating.rating} from {coverage} (Damodaran, {RATINGS_AS_OF:%b %Y})",
-        "stable_beta": "default: mature firms move towards the market beta of 1",
+        "marginal_tax_rate": "US federal 21% + state",
         "cash": f"Cash and equivalents, {fy}",
         "non_operating_assets": f"Short-term investments, {fy}",
         "debt": f"Long-term debt, {fy}",
-        "lease_liabilities": "not subtracted: operating lease costs are already deducted in operating income (ASC 842)",
-        "industry": industry.name,
         "minority_interest": f"Minority interest, {fy}",
         "shares": f"Diluted weighted-average shares, {fy}",
+        "industry": industry.name,
     }
-    inputs = DcfInputs(
-        base_year=base.fiscal_year, base_ebit=base_ebit, effective_tax_rate=tax,
-        marginal_tax_rate=MARGINAL_TAX_RATE, high_growth=growth.growth, high_growth_years=high_years,
-        transition_years=TRANSITION_YEARS, return_on_capital=roc, stable_growth=stable_growth, risk_free_rate=rf,
-        stable_return_on_capital=stable_roc,
-        equity_risk_premium=ERP, unlevered_beta=industry.unlevered_beta_cash_corrected,
-        debt_to_capital=industry.debt_to_capital, default_spread=rating.spread,
-        cash=base.cash or Decimal("0"), non_operating_assets=base.short_term_investments or Decimal("0"),
-        debt=base.debt or Decimal("0"), lease_liabilities=Decimal("0"),
-        minority_interest=base.minority_interest or Decimal("0"), shares=shares, sources=sources,
-    )
     if base.debt is None:
         notes.append(f"No long-term debt reported for {fy}; treated as zero.")
+    inputs = FairValueInputs(
+        base_year=base.fiscal_year, base_fcf=base_fcf, initial_growth=growth, high_growth_years=GROWTH_YEARS,
+        fade_years=FADE_YEARS, stable_growth=long_run, normalised_operating_income=normalised, tax_rate=tax,
+        risk_free_rate=risk_free.rate, equity_risk_premium=ERP, unlevered_beta=industry.unlevered_beta_cash_corrected,
+        debt_to_capital=industry.debt_to_capital, default_spread=rating.spread, marginal_tax_rate=MARGINAL_TAX_RATE,
+        cash=base.cash or Decimal("0"), non_operating_assets=base.short_term_investments or Decimal("0"),
+        debt=base.debt or Decimal("0"), minority_interest=base.minority_interest or Decimal("0"), shares=shares,
+        sources=sources, history=history,
+    )
     return inputs, notes
