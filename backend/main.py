@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.api.routes.meta import router as meta_router
+from backend.api.routes.costs import router as costs_router
 from backend.api.routes.research import companies_router, router as research_router
 from backend.core.config import settings
 from backend.services.errors import (
@@ -65,3 +66,4 @@ def health_check():
 app.include_router(research_router)
 app.include_router(companies_router)
 app.include_router(meta_router)
+app.include_router(costs_router)

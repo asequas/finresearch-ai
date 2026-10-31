@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from backend.models.agent_run import AgentRun
 from backend.models.research_job import ResearchJob
 from backend.schemas.agent import AgentTraceResponse, PlannedQuestionOut, ResearcherOut, RoundOut, TraceTotals
+from backend.services.costs import job_cost
 from backend.services.errors import NotFoundError
 
 
@@ -58,6 +59,7 @@ class AgentTraceService:
                 entry.decision, entry.reason, entry.gaps = meta.get("decision"), meta.get("reason"), meta.get("gaps", [])
 
         totals = TraceTotals(
+            cost_usd=job_cost(session, job_id),
             researchers=len(researchers),
             tool_calls=sum(len(r.tool_calls) for r in researchers),
             revisions=sum(1 for r in rounds.values() if r.decision == "revise"),

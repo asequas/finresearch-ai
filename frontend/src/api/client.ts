@@ -23,6 +23,7 @@ export type ToolCall = components["schemas"]["ToolCallOut"];
 export type ChatThread = components["schemas"]["ChatThreadResponse"];
 export type ChatMessage = components["schemas"]["ChatMessageOut"];
 export type ChatCitation = components["schemas"]["ChatCitationOut"];
+export type CostSummary = components["schemas"]["CostSummary"];
 
 export const api = createClient<import("./schema").paths>({ baseUrl: "" });
 
@@ -133,6 +134,15 @@ export function useCompany(ticker: string) {
     retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
     refetchInterval: (query) =>
       query.state.data?.jobs.some((j) => isActive(j.status)) ? 3000 : false,
+  });
+}
+
+export function useCosts(days: number) {
+  return useQuery({
+    queryKey: ["costs", days],
+    queryFn: () => unwrap(api.GET("/api/v1/costs", { params: { query: { days } } })),
+    placeholderData: keepPreviousData,
+    refetchInterval: 15000,
   });
 }
 
