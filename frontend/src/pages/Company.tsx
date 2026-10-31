@@ -4,7 +4,7 @@ import { ApiError, type CompanyDetail, useCompany } from "../api/client";
 import { BarChart, LineChart } from "../components/charts";
 import { JobRows } from "../components/JobRows";
 import { Bar, ButtonLink, ErrorBlock, PageTitle, Panel } from "../components/ui";
-import { changeText, date, metricDisplay, toNumber, usd, usdTick } from "../lib/format";
+import { changeText, date, metricDisplay, money, toNumber, usd, usdTick } from "../lib/format";
 import { useTitle } from "../lib/useTitle";
 
 const STRIP = [
@@ -67,7 +67,7 @@ export function CompanyPage() {
       />
 
       {detail && (
-        <dl className="panel mb-6 grid grid-cols-2 gap-x-4 gap-y-4 px-6 py-4 md:grid-cols-4" aria-label="Company facts">
+        <dl className={`panel mb-6 grid grid-cols-2 gap-x-4 gap-y-4 px-6 py-4 ${detail.latest_valuation ? "md:grid-cols-5" : "md:grid-cols-4"}`} aria-label="Company facts">
           {[
             ["Industry", detail.company.sic_description ?? "—"],
             ["Fiscal year ends", detail.company.fiscal_year_end ? date(`2026-${detail.company.fiscal_year_end.slice(0, 2)}-${detail.company.fiscal_year_end.slice(2)}`, { month: "long", day: "numeric" }) : "—"],
@@ -79,6 +79,17 @@ export function CompanyPage() {
               <dd className={label === "SEC CIK" ? "num" : ""}>{value}</dd>
             </div>
           ))}
+          {detail.latest_valuation && (
+            <div>
+              <dt className="text-small text-muted">DCF value per share</dt>
+              <dd>
+                <Link to={`/reports/${detail.latest_valuation.job_id}#valuation`} className="num hover:underline">
+                  {money(detail.latest_valuation.value_per_share)}
+                </Link>
+                <span className="ml-1.5 text-small text-muted">FY{detail.latest_valuation.base_year} base</span>
+              </dd>
+            </div>
+          )}
         </dl>
       )}
 

@@ -5,6 +5,7 @@ import { ApiError, type Claim, type Report, useJob, useReport } from "../api/cli
 import { BarChart, LedgerBar, LineChart } from "../components/charts";
 import { DownloadIcon, ExternalIcon, PrintIcon } from "../components/icons";
 import { AnalystChat } from "../components/AnalystChat";
+import { ValuationSection } from "../components/Valuation";
 import { type InspectTarget, Inspector } from "../components/Inspector";
 import { SectionIndex } from "../components/SectionIndex";
 import { Bar, Button, ButtonLink, Empty, ErrorBlock, Panel, Pill, VerificationPill } from "../components/ui";
@@ -28,6 +29,7 @@ const SECTIONS = [
   { id: "answer", label: "Answer" },
   { id: "summary", label: "Summary" },
   { id: "financials", label: "Financials" },
+  { id: "valuation", label: "Valuation" },
   { id: "scenarios", label: "Scenarios" },
   { id: "risks", label: "Risks" },
   { id: "ledger", label: "Evidence" },
@@ -309,6 +311,8 @@ function ReportView({ report }: { report: Report }) {
               </table>
             </div>
           </Panel>
+
+          <ValuationSection jobId={report.job.id} />
 
           {report.scenarios.length > 0 && (
             <Panel id="scenarios" title="Scenarios" aside={<span>Assumptions anchored to the data</span>}>
