@@ -79,3 +79,15 @@ Consolidated 68,593 79,975"""
 )
 def test_table_rows_count_as_evidence(quote, expected):
     assert quote_in_source(quote, TABLE) is expected
+
+
+def test_dcf_value_per_share_claims_are_checked_to_the_cent():
+    from decimal import Decimal
+
+    from backend.analysis.metrics import format_metric
+    from backend.analysis.verification import unmatched_numbers
+
+    value = (Decimal("142.3719"), "USD/share")
+    assert format_metric(*value) == "$142.37"
+    assert unmatched_numbers("The DCF estimates intrinsic value at $142.37 per share.", [value]) == []
+    assert unmatched_numbers("The DCF estimates intrinsic value at $150.00 per share.", [value]) == ["$150.00"]
