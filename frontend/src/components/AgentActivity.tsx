@@ -53,6 +53,11 @@ function Lane({ researcher }: { researcher: Researcher }) {
             <span className="block text-small text-muted">
               {researcher.kind === "gap" ? "Re-checking a rejected claim" : "Planned question"}
               {researcher.attempt > 1 && `, attempt ${researcher.attempt}`}
+              {researcher.status === "completed" && researcher.notes === 0 && (
+                <span className="text-[var(--pill-negative-ink)]">
+                  {researcher.tool_calls.length === 0 ? ", answered without the filings (discarded)" : ", found no usable evidence"}
+                </span>
+              )}
             </span>
           </span>
           <span className="num text-right text-small text-muted">

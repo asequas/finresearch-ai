@@ -140,6 +140,7 @@ needed.
 | Job | What happened | Final claims | Quotes verbatim | Numbers match |
 | --- | --- | --- | --- | --- |
 | MSFT | Gemini 503s during research across 3 attempts: each retry resumed the graph and re-ran only the unfinished researcher (q2-q4 ran once). Revision verified worse (10.5 vs 15.5 material claims supported), so the critic restored round 0 | 15 supported, 1 partly | 100% | 100% |
+| NVDA | One researcher answered without a tool call (discarded); the critic sent that question and one unsupported claim back. Round 1 researched both, and every claim verified. 4 min 47 s | 16 supported | 100% | 100% |
 | AAPL (before the restore guard) | All strong models rate-limited at redraft time; the lite fallback dropped every quote and supported claims fell from 17 to 7. This run is why the restore guard exists | 7 supported, 8 unsupported | 0% | 100% |
 
 Two more lessons from these runs became code and tests:
