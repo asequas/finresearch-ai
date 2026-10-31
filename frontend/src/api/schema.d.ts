@@ -817,6 +817,28 @@ export interface components {
             /** Approach */
             approach: string;
         };
+        /**
+         * PriceCheckOut
+         * @description A price the reader entered, set against the valuation. Decision support, not a recommendation.
+         */
+        PriceCheckOut: {
+            /** Price */
+            price: string;
+            /** Value Per Share */
+            value_per_share: string;
+            /** Range Low */
+            range_low: string | null;
+            /** Range High */
+            range_high: string | null;
+            /** Gap */
+            gap: string;
+            /** Position */
+            position: string;
+            /** Implied High Growth */
+            implied_high_growth: string | null;
+            /** Explanation */
+            explanation: string;
+        };
         /** ProjectionRow */
         ProjectionRow: {
             /** Year */
@@ -1327,6 +1349,7 @@ export interface components {
              * @default []
              */
             overridden: string[];
+            price_check?: components["schemas"]["PriceCheckOut"] | null;
             /**
              * Created At
              * Format: date-time
@@ -1367,6 +1390,11 @@ export interface components {
             equity_risk_premium?: number | string | null;
             /** Debt To Capital */
             debt_to_capital?: number | string | null;
+            /**
+             * Market Price
+             * @description A share price to compare with (typed by the reader; the app fetches no prices).
+             */
+            market_price?: number | string | null;
         };
     };
     responses: never;
