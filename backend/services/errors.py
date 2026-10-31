@@ -16,3 +16,11 @@ class InvalidStateError(ServiceError):
 
 class BadRequestError(ServiceError):
     pass
+
+
+class LimitReachedError(ServiceError):
+    """A usage cap (e.g. chat turns per report) was hit. 429."""
+
+
+class UpstreamBusyError(ServiceError):
+    """The model provider is overloaded or out of quota; try again shortly. 503."""
