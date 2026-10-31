@@ -127,6 +127,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/research/{job_id}/valuation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Valuation
+         * @description The job's DCF intrinsic value: every assumption with its source, the projection, bridge and sensitivity.
+         */
+        get: operations["get_valuation_api_v1_research__job_id__valuation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/{job_id}/valuation/what-if": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Valuation What If
+         * @description Recompute the DCF with some assumptions changed. Deterministic, saves nothing, no AI.
+         */
+        post: operations["valuation_what_if_api_v1_research__job_id__valuation_what_if_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/research/{job_id}/chat": {
         parameters: {
             query?: never;
@@ -265,6 +305,48 @@ export interface components {
              */
             claim_ids: string[];
         };
+        /** AssumptionOut */
+        AssumptionOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+            /** Unit */
+            unit: string;
+            /** Source */
+            source: string;
+            /** Editable */
+            editable: boolean;
+        };
+        /** BridgeOut */
+        BridgeOut: {
+            /** Present Value Of Fcff */
+            present_value_of_fcff: string;
+            /** Present Value Of Terminal */
+            present_value_of_terminal: string;
+            /** Operating Value */
+            operating_value: string;
+            /** Cash */
+            cash: string;
+            /** Non Operating Assets */
+            non_operating_assets: string;
+            /** Debt */
+            debt: string;
+            /** Lease Liabilities */
+            lease_liabilities: string;
+            /** Minority Interest */
+            minority_interest: string;
+            /** Options Value */
+            options_value: string;
+            /** Equity Value */
+            equity_value: string;
+            /** Shares */
+            shares: string;
+            /** Value Per Share */
+            value_per_share: string;
+        };
         /** BudgetOut */
         BudgetOut: {
             /** Billing */
@@ -389,6 +471,7 @@ export interface components {
             company: components["schemas"]["CompanyOut"];
             /** Latest Report Job Id */
             latest_report_job_id: string | null;
+            latest_valuation?: components["schemas"]["LatestValuation"] | null;
             /** Data As Of */
             data_as_of: string | null;
             /** Financials */
@@ -492,6 +575,29 @@ export interface components {
              * Format: date
              */
             date: string;
+        };
+        /** DerivedOut */
+        DerivedOut: {
+            /** Levered Beta */
+            levered_beta: string;
+            /** Cost Of Equity */
+            cost_of_equity: string;
+            /** Pre Tax Cost Of Debt */
+            pre_tax_cost_of_debt: string;
+            /** After Tax Cost Of Debt */
+            after_tax_cost_of_debt: string;
+            /** Cost Of Capital */
+            cost_of_capital: string;
+            /** Stable Cost Of Equity */
+            stable_cost_of_equity: string;
+            /** Stable Cost Of Capital */
+            stable_cost_of_capital: string;
+            /** Reinvestment Rate */
+            reinvestment_rate: string;
+            /** Stable Reinvestment Rate */
+            stable_reinvestment_rate: string;
+            /** Stable Return On Capital */
+            stable_return_on_capital: string;
         };
         /** EvidenceOut */
         EvidenceOut: {
@@ -604,6 +710,23 @@ export interface components {
             /** Claim Ids */
             claim_ids: string[];
         };
+        /** LatestValuation */
+        LatestValuation: {
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Value Per Share */
+            value_per_share: string;
+            /** Base Year */
+            base_year: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** MetaResponse */
         MetaResponse: {
             /** Version */
@@ -693,6 +816,31 @@ export interface components {
             focus: string;
             /** Approach */
             approach: string;
+        };
+        /** ProjectionRow */
+        ProjectionRow: {
+            /** Year */
+            year: number;
+            /** Fiscal Year */
+            fiscal_year: number;
+            /** Growth */
+            growth: string;
+            /** Tax Rate */
+            tax_rate: string;
+            /** Ebit */
+            ebit: string;
+            /** After Tax Ebit */
+            after_tax_ebit: string;
+            /** Reinvestment Rate */
+            reinvestment_rate: string;
+            /** Reinvestment */
+            reinvestment: string;
+            /** Fcff */
+            fcff: string;
+            /** Cost Of Capital */
+            cost_of_capital: string;
+            /** Present Value */
+            present_value: string;
         };
         /** QueueInfo */
         QueueInfo: {
@@ -886,7 +1034,7 @@ export interface components {
          * ResearchStage
          * @enum {string}
          */
-        ResearchStage: "resolving_company" | "fetching_filings" | "extracting_financials" | "computing_metrics" | "indexing_documents" | "analyzing" | "planning" | "researching" | "drafting" | "verifying" | "synthesizing";
+        ResearchStage: "resolving_company" | "fetching_filings" | "extracting_financials" | "computing_metrics" | "valuing" | "indexing_documents" | "analyzing" | "planning" | "researching" | "drafting" | "verifying" | "synthesizing";
         /** ResearcherOut */
         ResearcherOut: {
             /** Task Id */
@@ -984,6 +1132,15 @@ export interface components {
             /** Assumptions */
             assumptions: components["schemas"]["Assumption"][];
         };
+        /** SensitivityOut */
+        SensitivityOut: {
+            /** Cost Of Capital Deltas */
+            cost_of_capital_deltas: string[];
+            /** Stable Growths */
+            stable_growths: string[];
+            /** Value Per Share */
+            value_per_share: (string | null)[][];
+        };
         /** Spend */
         Spend: {
             /** Billed */
@@ -1053,6 +1210,21 @@ export interface components {
             /** Samples */
             samples: number;
         };
+        /** TerminalOut */
+        TerminalOut: {
+            /** After Tax Ebit */
+            after_tax_ebit: string;
+            /** Reinvestment Rate */
+            reinvestment_rate: string;
+            /** Fcff */
+            fcff: string;
+            /** Value */
+            value: string;
+            /** Present Value */
+            present_value: string;
+            /** Share Of Operating Value */
+            share_of_operating_value: string;
+        };
         /** ToolCallOut */
         ToolCallOut: {
             /** Tool */
@@ -1097,6 +1269,70 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /** ValuationOut */
+        ValuationOut: {
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Status */
+            status: string;
+            /** Skip Reason */
+            skip_reason?: string | null;
+            /** Method */
+            method: string;
+            /** Calculation Version */
+            calculation_version: string;
+            /** Industry */
+            industry?: string | null;
+            /** Base Year */
+            base_year?: number | null;
+            /** Value Per Share */
+            value_per_share?: string | null;
+            /** Range Low */
+            range_low?: string | null;
+            /** Range High */
+            range_high?: string | null;
+            /** Equity Value */
+            equity_value?: string | null;
+            /** Operating Value */
+            operating_value?: string | null;
+            /**
+             * Assumptions
+             * @default []
+             */
+            assumptions: components["schemas"]["AssumptionOut"][];
+            derived?: components["schemas"]["DerivedOut"] | null;
+            /**
+             * Projection
+             * @default []
+             */
+            projection: components["schemas"]["ProjectionRow"][];
+            terminal?: components["schemas"]["TerminalOut"] | null;
+            bridge?: components["schemas"]["BridgeOut"] | null;
+            sensitivity?: components["schemas"]["SensitivityOut"] | null;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+            /**
+             * What If
+             * @default false
+             */
+            what_if: boolean;
+            /**
+             * Overridden
+             * @default []
+             */
+            overridden: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** VerificationSummary */
         VerificationSummary: {
             /** Total */
@@ -1109,6 +1345,28 @@ export interface components {
             unsupported: number;
             /** Not Verified */
             not_verified: number;
+        };
+        /**
+         * WhatIfRequest
+         * @description Assumptions a reader may change. Everything else (Rf, betas, filings) stays as stored, so results reproduce.
+         */
+        WhatIfRequest: {
+            /** High Growth */
+            high_growth?: number | string | null;
+            /** High Growth Years */
+            high_growth_years?: number | null;
+            /** Transition Years */
+            transition_years?: number | null;
+            /** Return On Capital */
+            return_on_capital?: number | string | null;
+            /** Stable Growth */
+            stable_growth?: number | string | null;
+            /** Stable Return On Capital */
+            stable_return_on_capital?: number | string | null;
+            /** Equity Risk Premium */
+            equity_risk_premium?: number | string | null;
+            /** Debt To Capital */
+            debt_to_capital?: number | string | null;
         };
     };
     responses: never;
@@ -1402,6 +1660,93 @@ export interface operations {
                 };
             };
             /** @description Research job not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_valuation_api_v1_research__job_id__valuation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValuationOut"];
+                };
+            };
+            /** @description Job not found or not valued yet */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    valuation_what_if_api_v1_research__job_id__valuation_what_if_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WhatIfRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValuationOut"];
+                };
+            };
+            /** @description The assumptions break the model's constraints */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
             404: {
                 headers: {
                     [name: string]: unknown;
