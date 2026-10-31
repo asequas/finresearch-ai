@@ -149,6 +149,10 @@ def get_research_trace(
     return AgentTraceService().get_trace(db, job_id=job_id, user_id=current_user.id)
 
 
+def get_valuation_service() -> ValuationService:
+    return ValuationService()
+
+
 @router.get(
     "/{job_id}/valuation",
     response_model=ValuationOut,
@@ -157,10 +161,11 @@ def get_research_trace(
 def get_valuation(
     job_id: UUID,
     db: Session = Depends(get_db),
+    service: ValuationService = Depends(get_valuation_service),
     current_user: User = Depends(get_current_user),
 ):
-    """The job's DCF intrinsic value: every assumption with its source, the projection, bridge and sensitivity."""
-    return ValuationService().get(db, job_id=job_id, user_id=current_user.id)
+    """The job's fair value with every sourced assumption, set against a delayed share price when one is available."""
+    return service.get(db, job_id=job_id, user_id=current_user.id)
 
 
 @router.post(
@@ -172,10 +177,11 @@ def valuation_what_if(
     job_id: UUID,
     body: WhatIfRequest,
     db: Session = Depends(get_db),
+    service: ValuationService = Depends(get_valuation_service),
     current_user: User = Depends(get_current_user),
 ):
-    """Recompute the DCF with some assumptions changed. Deterministic, saves nothing, no AI."""
-    return ValuationService().what_if(db, job_id=job_id, user_id=current_user.id, request=body)
+    """Recompute the fair value with some assumptions changed, or check a typed price. Saves nothing, no AI."""
+    return service.what_if(db, job_id=job_id, user_id=current_user.id, request=body)
 
 
 def get_chat_service() -> AnalystChatService:

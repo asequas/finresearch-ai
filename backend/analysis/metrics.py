@@ -40,6 +40,7 @@ class FinancialPeriod:
     short_term_investments: Decimal | None = None
     lease_liabilities: Decimal | None = None
     minority_interest: Decimal | None = None
+    share_based_compensation: Decimal | None = None
 
     @property
     def period(self) -> str:

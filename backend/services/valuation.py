@@ -1,40 +1,40 @@
-"""Reading a job's DCF valuation and running what-ifs on its stored inputs (ADR 0010). No model calls."""
+"""Reading a job's fair value, checking it against the share price, and running what-ifs (ADR 0012). No model calls."""
+from collections.abc import Callable
 from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.core.config import settings
 from backend.models.research_job import ResearchJob
 from backend.models.valuation import Valuation
-from backend.schemas.valuation import AssumptionOut, PriceCheckOut, ValuationOut, WhatIfRequest
+from backend.schemas.valuation import AssumptionOut, MarketPriceOut, PriceCheckOut, ValuationOut, WhatIfRequest
 from backend.services.errors import BadRequestError, NotFoundError
-from backend.valuation.dcf import (
-    DcfInputs,
+from backend.valuation.fair_value import (
+    FairValueInputs,
     InvalidAssumptions,
     ValuationSkipped,
     apply_overrides,
-    implied_high_growth,
-    value_firm,
+    implied_growth,
+    value,
 )
+from backend.valuation.price import MarketPrice, latest_price
 
 # (field, label, unit, editable in a what-if)
 ASSUMPTIONS = [
-    ("base_ebit", "Operating income, base year", "USD", False),
-    ("effective_tax_rate", "Effective tax rate", "ratio", False),
-    ("marginal_tax_rate", "Marginal tax rate (stable)", "ratio", False),
-    ("high_growth", "High-growth rate", "ratio", True),
-    ("high_growth_years", "High-growth years", "years", True),
-    ("transition_years", "Transition years", "years", True),
-    ("return_on_capital", "Return on new capital", "ratio", True),
-    ("stable_growth", "Stable growth rate", "ratio", True),
-    ("stable_return_on_capital", "Stable return on capital", "ratio", True),
+    ("base_fcf", "Free cash flow, 3-year average", "USD", False),
+    ("initial_growth", "Growth, first years", "ratio", True),
+    ("high_growth_years", "Years at that growth", "years", True),
+    ("fade_years", "Years fading to long-run growth", "years", True),
+    ("stable_growth", "Long-run growth", "ratio", True),
+    ("normalised_operating_income", "Normalised operating income", "USD", False),
+    ("tax_rate", "Tax rate", "ratio", False),
     ("risk_free_rate", "Risk-free rate", "ratio", False),
     ("equity_risk_premium", "Equity risk premium", "ratio", True),
     ("unlevered_beta", "Unlevered beta", "number", False),
     ("debt_to_capital", "Debt ratio D/(D+E)", "ratio", True),
     ("default_spread", "Default spread", "ratio", False),
-    ("stable_beta", "Stable beta", "number", False),
     ("cash", "Cash", "USD", False),
     ("non_operating_assets", "Short-term investments", "USD", False),
     ("debt", "Debt", "USD", False),
@@ -42,13 +42,11 @@ ASSUMPTIONS = [
     ("shares", "Diluted shares", "shares", False),
 ]
 
+PriceFetcher = Callable[[str], MarketPrice | None]
 
-def _range(sensitivity: dict, base_growth: str) -> tuple[Decimal | None, Decimal | None]:
-    growths = [Decimal(g) for g in sensitivity["stable_growths"]]
-    base = Decimal(base_growth)
-    cols = [i for i, g in enumerate(growths) if abs(g - base) <= Decimal("0.005")]
-    cells = [Decimal(v) for row in sensitivity["value_per_share"][1:4] for i, v in enumerate(row) if i in cols and v is not None]
-    return (min(cells), max(cells)) if cells else (None, None)
+
+def default_price_fetcher(ticker: str) -> MarketPrice | None:
+    return latest_price(ticker, settings.data_cache_dir, source=settings.price_source)
 
 
 def to_out(job_id: UUID, valuation: Valuation, result: dict | None = None, *, overridden: list[str] | None = None) -> ValuationOut:
@@ -58,78 +56,85 @@ def to_out(job_id: UUID, valuation: Valuation, result: dict | None = None, *, ov
     result = result or {**valuation.result, "inputs": valuation.inputs, "warnings": valuation.warnings or []}
     inputs = result["inputs"]
     sources = inputs.get("sources", {})
-    derived = result["derived"]
-    assumptions = []
-    for key, label, unit, editable in ASSUMPTIONS:
-        value = inputs.get(key)
-        source = sources.get(key, "")
-        if key == "stable_return_on_capital" and value is None:
-            value, source = derived["stable_return_on_capital"], "= stable cost of capital (no excess returns forever)"
-        if value is None:
-            continue
-        assumptions.append(AssumptionOut(key=key, label=label, value=Decimal(str(value)), unit=unit, source=source, editable=editable))
-    low, high = _range(result["sensitivity"], inputs["stable_growth"])
+    assumptions = [
+        AssumptionOut(key=key, label=label, value=Decimal(str(inputs[key])), unit=unit, source=sources.get(key, ""), editable=editable)
+        for key, label, unit, editable in ASSUMPTIONS if inputs.get(key) is not None
+    ]
     return ValuationOut(
-        job_id=job_id, status="valued", method=valuation.method, calculation_version=result.get("calculation_version", valuation.calculation_version),
-        industry=valuation.industry, base_year=inputs["base_year"], value_per_share=Decimal(result["bridge"]["value_per_share"]),
-        range_low=low, range_high=high, equity_value=Decimal(result["bridge"]["equity_value"]),
-        operating_value=Decimal(result["bridge"]["operating_value"]), assumptions=assumptions, derived=derived,
-        projection=result["projection"], terminal=result["terminal"], bridge=result["bridge"], sensitivity=result["sensitivity"],
-        warnings=result.get("warnings", []), what_if=overridden is not None, overridden=overridden or [],
-        created_at=valuation.created_at,
+        job_id=job_id, status="valued", method=valuation.method,
+        calculation_version=result.get("calculation_version", valuation.calculation_version), industry=valuation.industry,
+        base_year=inputs["base_year"], fair_value=Decimal(result["fair_value"]), range_low=Decimal(result["range_low"]),
+        range_high=Decimal(result["range_high"]), methods_used=result["methods_used"], assumptions=assumptions,
+        cost_of_capital=result["cost_of_capital"], fcf_history=inputs.get("history", []), dcf=result.get("dcf"),
+        epv=result.get("epv"), sensitivity=result.get("sensitivity"), warnings=result.get("warnings", []),
+        what_if=overridden is not None, overridden=overridden or [], created_at=valuation.created_at,
     )
 
 
-def price_check(inputs: DcfInputs, out: ValuationOut, price: Decimal) -> PriceCheckOut:
-    value = out.value_per_share
-    low, high = out.range_low or value, out.range_high or value
+def price_check(inputs: FairValueInputs, out: ValuationOut, price: Decimal) -> PriceCheckOut:
+    low, high, fair = out.range_low, out.range_high, out.fair_value
     position = "below_range" if price < low else "above_range" if price > high else "within_range"
-    implied = implied_high_growth(inputs, price)
-    growth = next((a.value for a in out.assumptions if a.key == "high_growth"), None)
-    years = next((int(a.value) for a in out.assumptions if a.key == "high_growth_years"), None)
-    gap = value / price - 1
+    gap = fair / price - 1
+    implied = implied_growth(inputs, price)
     if position == "below_range":
-        lead = f"The price is below the estimate range: on these assumptions the shares look undervalued by about {gap:.0%}."
+        lead = f"The price is below the fair-value range: on these assumptions the shares look undervalued (fair value {gap:.0%} above the price)."
     elif position == "above_range":
-        lead = f"The price is above the estimate range: on these assumptions the shares look overvalued (estimate {-gap:.0%} below the price)."
+        lead = f"The price is above the fair-value range: on these assumptions the shares look overvalued (fair value {-gap:.0%} below the price)."
     else:
-        lead = "The price is within the estimate range: on these assumptions the shares look roughly fairly valued."
-    if implied is not None and growth is not None:
-        tail = (f" The price implies {implied:.1%} a year of operating-income growth for {years} years, against "
-                f"{growth:.1%} assumed here; ask whether that is achievable.")
+        lead = "The price is within the fair-value range: on these assumptions the shares look roughly fairly valued."
+    if implied is not None:
+        tail = (f" To justify this price, free cash flow would need to grow about {implied:.1%} a year for "
+                f"{inputs.high_growth_years} years (the record suggests {inputs.initial_growth:.1%}).")
+    elif "dcf" in out.methods_used:
+        tail = " No growth rate between 0% and 60% makes the cash-flow DCF match this price."
     else:
-        tail = " No growth rate between 0% and 60% reproduces this price with the other assumptions held."
-    return PriceCheckOut(price=price, value_per_share=value, range_low=out.range_low, range_high=out.range_high,
-                         gap=gap.quantize(Decimal("0.0001")), position=position,
-                         implied_high_growth=implied, explanation=lead + tail)
+        tail = ""
+    return PriceCheckOut(price=price, fair_value=fair, range_low=low, range_high=high, gap=gap.quantize(Decimal("0.0001")),
+                         position=position, implied_growth=implied, explanation=lead + tail)
 
 
 class ValuationService:
-    def _load(self, session: Session, job_id: UUID, user_id: UUID) -> Valuation:
+    def __init__(self, price_fetcher: PriceFetcher | None = None):
+        self.price_fetcher = price_fetcher or default_price_fetcher
+
+    def _load(self, session: Session, job_id: UUID, user_id: UUID) -> tuple[ResearchJob, Valuation]:
         job = session.scalar(select(ResearchJob).where(ResearchJob.id == job_id, ResearchJob.user_id == user_id))
         if job is None:
             raise NotFoundError("Research job not found")
         valuation = session.scalar(select(Valuation).where(Valuation.research_job_id == job_id))
         if valuation is None:
             raise NotFoundError("This job has no valuation yet")
-        return valuation
+        return job, valuation
+
+    def _with_price(self, out: ValuationOut, inputs: FairValueInputs | None, ticker: str, typed: Decimal | None) -> ValuationOut:
+        if out.status != "valued" or inputs is None:
+            return out
+        if typed is not None:
+            out.market_price = MarketPriceOut(price=typed, as_of=None, source="entered by you")
+        else:
+            quote = self.price_fetcher(ticker)
+            if quote is not None:
+                out.market_price = MarketPriceOut(price=quote.price, as_of=quote.as_of, source=quote.source)
+        if out.market_price is not None:
+            out.price_check = price_check(inputs, out, out.market_price.price)
+        return out
 
     def get(self, session: Session, *, job_id: UUID, user_id: UUID) -> ValuationOut:
-        return to_out(job_id, self._load(session, job_id, user_id))
+        job, valuation = self._load(session, job_id, user_id)
+        out = to_out(job_id, valuation)
+        inputs = FairValueInputs.from_json(valuation.inputs) if valuation.inputs else None
+        return self._with_price(out, inputs, job.ticker, None)
 
     def what_if(self, session: Session, *, job_id: UUID, user_id: UUID, request: WhatIfRequest) -> ValuationOut:
         """Recompute from the stored inputs with some assumptions changed. Nothing is saved."""
-        valuation = self._load(session, job_id, user_id)
+        job, valuation = self._load(session, job_id, user_id)
         if valuation.status != "valued":
             raise BadRequestError(f"There is no valuation to vary: {valuation.skip_reason}")
         overrides = request.model_dump(exclude_none=True)
-        price = overrides.pop("market_price", None)
-        inputs = apply_overrides(DcfInputs.from_json(valuation.inputs), overrides)
+        typed = overrides.pop("market_price", None)
+        inputs = apply_overrides(FairValueInputs.from_json(valuation.inputs), overrides)
         try:
-            result = value_firm(inputs)
-            out = to_out(job_id, valuation, result, overridden=sorted(overrides)) if overrides else to_out(job_id, valuation)
-            if price is not None:
-                out.price_check = price_check(inputs, out, price)
+            out = to_out(job_id, valuation, value(inputs), overridden=sorted(overrides)) if overrides else to_out(job_id, valuation)
+            return self._with_price(out, inputs, job.ticker, typed)
         except (InvalidAssumptions, ValuationSkipped) as exc:
             raise BadRequestError(str(exc)) from exc
-        return out
