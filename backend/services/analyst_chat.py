@@ -7,6 +7,7 @@ is stored, so the chat is held to the report's standard: an unverified citation 
 `report_chat_messages` is the record of the conversation. The agent is rebuilt from the last few turns on
 every question; there is no second copy of the history in a checkpointer.
 """
+import re
 from collections.abc import Callable
 from typing import Literal
 from uuid import UUID
@@ -187,7 +188,9 @@ class AnalystChatService:
     def _verify(self, session: Session, job_id: UUID, citations: list[ChatCitation]) -> list[ChatCitationOut]:
         """Check each cited quote against its passage; snap near-verbatim quotes to the filing's words."""
         def key(handle: str) -> str:
-            return "P:" + handle.strip().removeprefix("P:").removeprefix("p:").strip().lower()
+            # Models sometimes pack extra text into the field ("P:8272934b,quote:"); the handle is the 8 hex digits.
+            match = re.search(r"(?:p:)?\s*([0-9a-f]{8})\b", handle.strip().lower())
+            return f"P:{match.group(1)}" if match else handle.strip()
 
         resolved = resolve_handles(session, job_id, [key(c.handle) for c in citations])
         documents = {d.id: d for d in session.scalars(select(Document).where(

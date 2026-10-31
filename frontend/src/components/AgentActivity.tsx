@@ -96,7 +96,7 @@ function Verdicts({ counts }: { counts: Record<string, number> }) {
 function RoundHeading({ round, count }: { round: number; count: number }) {
   return (
     <h3 className="px-6 pt-4 pb-2 text-small font-medium text-muted">
-      {round === 0 ? `Researchers, ${count} in parallel` : `Revision ${round}: re-researching what the fact-checker rejected`}
+      {round === 0 ? `Researchers, one per question (${count})` : `Revision ${round}: re-researching what the fact-checker rejected`}
     </h3>
   );
 }
@@ -113,10 +113,10 @@ function Critic({ round }: { round: Trace["rounds"][number] }) {
       {round.decision && (
         <p className="mt-2 text-soft">
           {round.decision === "revise"
-            ? `Sent ${round.gaps.length} ${round.gaps.length === 1 ? "item" : "items"} back for more research (${round.reason}).`
+            ? `Sent back for more research: ${round.reason}.`
             : round.decision === "restore"
               ? `The revision made things worse, so it was undone: ${round.reason}.`
-              : `Moved on to writing the report: ${round.reason}.`}
+              : `Writing the report: ${round.reason}.`}
         </p>
       )}
     </div>

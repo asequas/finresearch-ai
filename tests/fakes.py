@@ -210,7 +210,7 @@ class ScriptedAnalyst(ScriptedResearcher):
                         if len(line.split()) >= 6 and not line.lower().startswith("item"))
         return {"name": "ChatAnswer", "args": {
             "answer": "Steel supply is the main input risk the filing names.",
-            "citations": [{"handle": handle, "quote": sentence},
+            "citations": [{"handle": f"{handle},quote:", "quote": sentence},  # malformed, as flash-lite sent it live
                           {"handle": handle, "quote": "Widgetco has no supply risks of any kind whatsoever."}],
             "confidence": "high",
         }}
