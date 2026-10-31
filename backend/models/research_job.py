@@ -42,6 +42,7 @@ class ResearchStage(str, PyEnum):
     FETCHING_FILINGS = "fetching_filings"
     EXTRACTING_FINANCIALS = "extracting_financials"
     COMPUTING_METRICS = "computing_metrics"
+    VALUING = "valuing"  # deterministic DCF (ADR 0010)
     INDEXING_DOCUMENTS = "indexing_documents"
     ANALYZING = "analyzing"  # the linear pipeline's single analysis stage; kept valid for jobs that ran it
     # The research agent's graph nodes (ADR 0008).
