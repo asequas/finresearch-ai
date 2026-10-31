@@ -35,7 +35,7 @@ from backend.models.company import Company
 from backend.models.document import Document
 from backend.models.document_chunk import DocumentChunk
 from backend.models.evidence import Evidence
-from backend.models.financial_snapshot import MONEY_FIELDS, FinancialSnapshot
+from backend.models.financial_snapshot import CORE_MONEY_FIELDS, MONEY_FIELDS, FinancialSnapshot
 from backend.models.report import Report
 from backend.models.research_job import ResearchJob, ResearchStage
 from backend.models.research_job_document import ResearchJobDocument
@@ -619,7 +619,7 @@ def build_limitations(session: Session, job_id: UUID) -> list[str]:
     ]
     snapshots = list(session.scalars(select(FinancialSnapshot).where(FinancialSnapshot.research_job_id == job_id)))
     never, partly = [], []
-    for name in SNAPSHOT_FIELDS:
+    for name in CORE_MONEY_FIELDS + ("eps", "diluted_shares"):
         years = sorted(s.period for s in snapshots if getattr(s, name) is None)
         label = name.replace("_", " ")
         if snapshots and len(years) == len(snapshots):

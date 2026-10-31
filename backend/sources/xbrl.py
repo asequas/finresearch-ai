@@ -36,6 +36,19 @@ FLOW_CONCEPTS: dict[str, tuple[str, ...]] = {
         "ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost",
     ),
     "interest_expense": ("InterestExpense", "InterestExpenseNonoperating", "InterestExpenseDebt"),
+    # Inputs to the DCF (ADR 0010).
+    "depreciation_amortization": (
+        "DepreciationDepletionAndAmortization",
+        "DepreciationAndAmortization",
+        "DepreciationAmortizationAndAccretionNet",
+        "Depreciation",
+    ),
+    "income_tax_expense": ("IncomeTaxExpenseBenefit",),
+    "pretax_income": (
+        "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+        "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments",
+        "IncomeLossFromContinuingOperationsBeforeIncomeTaxesDomestic",
+    ),
     "eps": ("EarningsPerShareDiluted",),
     "diluted_shares": ("WeightedAverageNumberOfDilutedSharesOutstanding",),
 }
@@ -51,6 +64,10 @@ INSTANT_CONCEPTS: dict[str, tuple[str, ...]] = {
         "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
     ),
     "debt": ("LongTermDebt", "LongTermDebtNoncurrent"),
+    # Inputs to the DCF's equity bridge (ADR 0010).
+    "short_term_investments": ("ShortTermInvestments", "MarketableSecuritiesCurrent", "AvailableForSaleSecuritiesDebtSecuritiesCurrent"),
+    "lease_liabilities": ("OperatingLeaseLiability",),
+    "minority_interest": ("MinorityInterest",),
 }
 
 UNIT_FOR_FIELD = {"eps": "USD/shares", "diluted_shares": "shares"}
