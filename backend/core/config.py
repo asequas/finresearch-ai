@@ -36,6 +36,16 @@ class Settings(BaseSettings):
     sec_user_agent: str | None = None
     data_cache_dir: str = ".cache/finresearch"
 
+    # Research agent (ADR 0008). Every loop is bounded: these caps are the agent's budget.
+    agent_max_researchers: int = 6
+    agent_tool_calls_per_researcher: int = 6
+    agent_model_calls_per_researcher: int = 8
+    agent_max_revisions: int = 1
+    # Researchers running at once; the free tier rate-limits harder than a paid key.
+    agent_max_concurrency: int = 3
+    chat_max_turns: int = 30
+    chat_tool_calls: int = 6
+
     # API
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 

@@ -43,7 +43,11 @@ class ResearchStage(str, PyEnum):
     EXTRACTING_FINANCIALS = "extracting_financials"
     COMPUTING_METRICS = "computing_metrics"
     INDEXING_DOCUMENTS = "indexing_documents"
-    ANALYZING = "analyzing"
+    ANALYZING = "analyzing"  # the linear pipeline's single analysis stage; kept valid for jobs that ran it
+    # The research agent's graph nodes (ADR 0008).
+    PLANNING = "planning"
+    RESEARCHING = "researching"
+    DRAFTING = "drafting"
     VERIFYING = "verifying"
     SYNTHESIZING = "synthesizing"
 
