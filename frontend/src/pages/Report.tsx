@@ -4,6 +4,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ApiError, type Claim, type Report, useJob, useReport } from "../api/client";
 import { BarChart, LedgerBar, LineChart } from "../components/charts";
 import { DownloadIcon, ExternalIcon, PrintIcon } from "../components/icons";
+import { AnalystChat } from "../components/AnalystChat";
 import { type InspectTarget, Inspector } from "../components/Inspector";
 import { SectionIndex } from "../components/SectionIndex";
 import { Bar, Button, ButtonLink, Empty, ErrorBlock, Panel, Pill, VerificationPill } from "../components/ui";
@@ -101,6 +102,8 @@ function ReportView({ report }: { report: Report }) {
   const setStatusFilter = (value: string | null) => setParam("status", value);
   const setTypeFilter = (value: string | null) => setParam("type", value);
   const [target, setTargetState] = useState<InspectTarget | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const research = report.research as { researchers: number; questions: string[]; revisions: number } | null | undefined;
   const setTarget = (next: InspectTarget | null) => {
     setTargetState(next);
     setParam("claim", next?.kind === "claim" ? String(next.number) : null);
@@ -142,8 +145,17 @@ function ReportView({ report }: { report: Report }) {
             {report.job.company} <span className="font-normal text-muted">{report.company.ticker}</span>
           </h1>
           <p className="mt-1 text-read text-soft">{report.headline}</p>
+          {research && (
+            <p className="no-print mt-2 text-small text-muted">
+              Researched by <span className="num">{research.researchers}</span> agents across{" "}
+              <span className="num">{research.questions.length}</span> sub-questions
+              {research.revisions > 0 ? <>, with <span className="num">{research.revisions}</span> fact-check revision round</> : null}.{" "}
+              <Link to={`/research/${report.job.id}#agent`} className="text-soft underline-offset-4 hover:text-ink hover:underline">See what each agent did</Link>
+            </p>
+          )}
         </div>
-        <div className="no-print flex gap-3">
+        <div className="no-print flex flex-wrap gap-3">
+          <Button variant="primary" onClick={() => setChatOpen(true)}>Ask the analyst</Button>
           <Button onClick={() => {
             download(`${report.company.ticker}-research-${report.data_as_of ?? "report"}.md`, reportToMarkdown(report));
             toast("Markdown report downloaded");
@@ -432,6 +444,7 @@ function ReportView({ report }: { report: Report }) {
 
       <p className="mt-8 max-w-[90ch] text-small text-muted">{report.disclaimer}</p>
       <Inspector target={target} onClose={() => setTarget(null)} />
+      <AnalystChat jobId={report.job.id} open={chatOpen} onClose={() => setChatOpen(false)} />
     </>
   );
 }

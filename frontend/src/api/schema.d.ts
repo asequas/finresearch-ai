@@ -107,6 +107,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/research/{job_id}/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Research Trace
+         * @description What the research agent did: its plan, each researcher's tool calls, and the critic's decisions.
+         */
+        get: operations["get_research_trace_api_v1_research__job_id__trace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/{job_id}/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Analyst Chat */
+        get: operations["get_analyst_chat_api_v1_research__job_id__chat_get"];
+        put?: never;
+        /**
+         * Ask Analyst
+         * @description Ask a follow-up question about a finished report. Answers cite filing passages, each quote checked.
+         */
+        post: operations["ask_analyst_api_v1_research__job_id__chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/companies": {
         parameters: {
             query?: never;
@@ -162,6 +203,32 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AgentTraceResponse */
+        AgentTraceResponse: {
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Mode */
+            mode: string;
+            /**
+             * Plan
+             * @default []
+             */
+            plan: components["schemas"]["PlannedQuestionOut"][];
+            /**
+             * Researchers
+             * @default []
+             */
+            researchers: components["schemas"]["ResearcherOut"][];
+            /**
+             * Rounds
+             * @default []
+             */
+            rounds: components["schemas"]["RoundOut"][];
+            totals: components["schemas"]["TraceTotals"];
+        };
         /** Assumption */
         Assumption: {
             /** Driver */
@@ -175,6 +242,74 @@ export interface components {
              * @default []
              */
             claim_ids: string[];
+        };
+        /** ChatCitationOut */
+        ChatCitationOut: {
+            /** Handle */
+            handle: string;
+            /** Quote */
+            quote: string;
+            /** Verified */
+            verified: boolean;
+            /** Section */
+            section?: string | null;
+            /** Form */
+            form?: string | null;
+            /** Period */
+            period?: string | null;
+            /** Url */
+            url?: string | null;
+        };
+        /** ChatMessageOut */
+        ChatMessageOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Role */
+            role: string;
+            /** Content */
+            content: string;
+            /**
+             * Citations
+             * @default []
+             */
+            citations: components["schemas"]["ChatCitationOut"][];
+            /**
+             * Tool Steps
+             * @default []
+             */
+            tool_steps: components["schemas"]["ToolCallOut"][];
+            /** Model */
+            model: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ChatQuestion */
+        ChatQuestion: {
+            /** Question */
+            question: string;
+        };
+        /** ChatThreadResponse */
+        ChatThreadResponse: {
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Messages */
+            messages: components["schemas"]["ChatMessageOut"][];
+            /** Turns Left */
+            turns_left: number;
+            /**
+             * Suggestions
+             * @default []
+             */
+            suggestions: string[];
         };
         /** ClaimOut */
         ClaimOut: {
@@ -398,6 +533,17 @@ export interface components {
             /** Embedding */
             embedding: string;
         };
+        /** PlannedQuestionOut */
+        PlannedQuestionOut: {
+            /** Id */
+            id: string;
+            /** Question */
+            question: string;
+            /** Focus */
+            focus: string;
+            /** Approach */
+            approach: string;
+        };
         /** QueueInfo */
         QueueInfo: {
             /** Queued */
@@ -451,6 +597,10 @@ export interface components {
             /** Claims */
             claims: components["schemas"]["ClaimOut"][];
             verification_summary: components["schemas"]["VerificationSummary"];
+            /** Research */
+            research?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** ResearchCreateRequest */
         ResearchCreateRequest: {
@@ -586,7 +736,56 @@ export interface components {
          * ResearchStage
          * @enum {string}
          */
-        ResearchStage: "resolving_company" | "fetching_filings" | "extracting_financials" | "computing_metrics" | "indexing_documents" | "analyzing" | "verifying" | "synthesizing";
+        ResearchStage: "resolving_company" | "fetching_filings" | "extracting_financials" | "computing_metrics" | "indexing_documents" | "analyzing" | "planning" | "researching" | "drafting" | "verifying" | "synthesizing";
+        /** ResearcherOut */
+        ResearcherOut: {
+            /** Task Id */
+            task_id: string;
+            /** Kind */
+            kind: string;
+            /** Question */
+            question: string;
+            /** Round */
+            round: number;
+            /** Status */
+            status: string;
+            /** Attempt */
+            attempt: number;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Answer */
+            answer: string | null;
+            /** Notes */
+            notes: number | null;
+            /**
+             * Gaps
+             * @default []
+             */
+            gaps: string[];
+            /**
+             * Dropped Handles
+             * @default []
+             */
+            dropped_handles: string[];
+            /**
+             * Tool Calls
+             * @default []
+             */
+            tool_calls: components["schemas"]["ToolCallOut"][];
+            /** Model */
+            model: string | null;
+            /** Input Tokens */
+            input_tokens: number | null;
+            /** Output Tokens */
+            output_tokens: number | null;
+            /** Error Message */
+            error_message: string | null;
+        };
         /** RiskOut */
         RiskOut: {
             /** Title */
@@ -597,6 +796,29 @@ export interface components {
             severity: string;
             /** Claim Ids */
             claim_ids: string[];
+        };
+        /** RoundOut */
+        RoundOut: {
+            /** Revision */
+            revision: number;
+            /**
+             * Verdicts
+             * @default {}
+             */
+            verdicts: {
+                [key: string]: number;
+            };
+            /** Decision */
+            decision?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Gaps
+             * @default []
+             */
+            gaps: {
+                [key: string]: unknown;
+            }[];
         };
         /** Scenario */
         Scenario: {
@@ -641,6 +863,32 @@ export interface components {
             median_ms: number;
             /** Samples */
             samples: number;
+        };
+        /** ToolCallOut */
+        ToolCallOut: {
+            /** Tool */
+            tool: string;
+            /** Input */
+            input: {
+                [key: string]: unknown;
+            };
+            /** Summary */
+            summary: string;
+            /** Ms */
+            ms: number;
+        };
+        /** TraceTotals */
+        TraceTotals: {
+            /** Researchers */
+            researchers: number;
+            /** Tool Calls */
+            tool_calls: number;
+            /** Revisions */
+            revisions: number;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -936,6 +1184,138 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    get_research_trace_api_v1_research__job_id__trace_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTraceResponse"];
+                };
+            };
+            /** @description Research job not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_analyst_chat_api_v1_research__job_id__chat_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatThreadResponse"];
+                };
+            };
+            /** @description Job not found or report not ready */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_analyst_api_v1_research__job_id__chat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatQuestion"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatThreadResponse"];
+                };
+            };
+            /** @description Job not found or report not ready */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description This report's question limit is used up */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The model provider is busy; retry shortly */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
