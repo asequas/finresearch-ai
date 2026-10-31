@@ -22,6 +22,8 @@ os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 # Tests never reach Gemini: no key, free-tier accounting, and every SDK request path is blocked below.
 os.environ["GEMINI_API_KEY"] = ""
 os.environ["GEMINI_BILLING"] = "free"
+# No share-price fetches in tests; tests that need a quote inject one.
+os.environ["PRICE_SOURCE"] = "none"
 # Tests never download models; the cross-encoder has its own opt-in test (pytest -m model).
 os.environ.setdefault("RERANKER", "none")
 
