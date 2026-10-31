@@ -1,6 +1,6 @@
 # ADR 0010: Deterministic DCF intrinsic value (Damodaran FCFF), no AI in the math
 
-- Status: accepted (2026-10-31)
+- Status: superseded by ADR 0012 (2026-11-01); accepted 2026-10-31
 - Builds on: ADR 0005 (evidence and metrics), ADR 0006 (verification), ADR 0008 (agent), ADR 0009 (costs)
 
 ## Context
