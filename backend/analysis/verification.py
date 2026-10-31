@@ -113,6 +113,8 @@ def matches_metric(mention: NumberMention, value: Decimal, unit: str) -> bool:
         return abs(abs(mention.value) - abs(value)) <= Decimal("0.0015")  # within 0.15 percentage points
     if mention.kind == "times" and unit == "times":
         return abs(mention.value - value) <= max(Decimal("0.02"), abs(value) * Decimal("0.01"))
+    if mention.kind == "usd" and unit == "USD/share":
+        return abs(abs(mention.value) - abs(value)) <= max(Decimal("0.01"), abs(value) * Decimal("0.005"))
     if mention.kind == "usd" and unit == "USD":
         tolerance = max(abs(value) * Decimal("0.01"), Decimal("0.5"))
         return abs(abs(mention.value) - abs(value)) <= tolerance
