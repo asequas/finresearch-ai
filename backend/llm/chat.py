@@ -54,7 +54,7 @@ class GeminiGuard(AgentMiddleware):
             raise mapped from exc
 
 
-def _gemini(model: str, temperature: float) -> BaseChatModel:
+def _gemini(model: str) -> BaseChatModel:
     from langchain_google_genai import ChatGoogleGenerativeAI
 
     if not settings.gemini_api_key:
@@ -62,7 +62,7 @@ def _gemini(model: str, temperature: float) -> BaseChatModel:
     kwargs = dict(
         model=model,
         google_api_key=settings.gemini_api_key,
-        temperature=temperature,
+        # No temperature: Gemini 3 models use fixed sampling and warn when one is sent.
         max_retries=0,  # retries belong to the job queue, where they are visible
         timeout=settings.gemini_timeout_seconds,
     )
@@ -80,11 +80,11 @@ class AgentModel:
     name: str = ""
 
 
-def gemini_agent_model(strong: bool = False, temperature: float = 0.2) -> AgentModel:
+def gemini_agent_model(strong: bool = False) -> AgentModel:
     preferred = settings.gemini_strong_model if strong else settings.gemini_fast_model
     fallbacks = settings.gemini_strong_fallbacks if strong else settings.gemini_fast_fallbacks
     chain = [preferred, *[m for m in fallbacks if m != preferred]]
     middleware: list[AgentMiddleware] = [GeminiGuard()]
     if len(chain) > 1:
-        middleware.append(ModelFallbackMiddleware(*[_gemini(m, temperature) for m in chain[1:]]))
-    return AgentModel(model=_gemini(chain[0], temperature), middleware=middleware, name=chain[0])
+        middleware.append(ModelFallbackMiddleware(*[_gemini(m) for m in chain[1:]]))
+    return AgentModel(model=_gemini(chain[0]), middleware=middleware, name=chain[0])
