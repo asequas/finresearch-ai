@@ -19,7 +19,7 @@ from decimal import ROUND_HALF_EVEN, Decimal, localcontext
 
 from backend.analysis.metrics import FinancialPeriod
 
-CALCULATION_VERSION = "dcf-1.0"
+CALCULATION_VERSION = "dcf-1.1"  # 1.1: R&D capitalised, advantage-aware defaults (ADR 0011)
 GROWTH_CAP = Decimal("0.20")
 RATE = Decimal("0.000001")
 MONEY = Decimal("0.01")
@@ -266,6 +266,42 @@ class Fundamentals:
     notes: list[str]
 
 
+@dataclass(frozen=True)
+class ResearchAsset:
+    """R&D treated as investment (Damodaran): each year's R&D is amortised straight-line over `life` years."""
+
+    life: int
+    asset: dict[int, Decimal]  # fiscal year -> unamortised R&D at year end
+    amortisation: dict[int, Decimal]
+    spend: dict[int, Decimal]
+    estimated_years: int  # years before our data, assumed equal to the earliest reported R&D
+
+    def adjustment(self, year: int) -> Decimal:
+        """Added to operating income and to reinvestment: R&D spent this year minus amortisation of past R&D."""
+        return self.spend.get(year, Decimal("0")) - self.amortisation.get(year, Decimal("0"))
+
+
+def research_asset(periods: list[FinancialPeriod], life: int) -> ResearchAsset | None:
+    reported = {p.fiscal_year: p.research_and_development for p in periods if p.research_and_development}
+    if not reported:
+        return None
+    first = min(reported)
+    estimated = set()
+
+    def rd(year: int) -> Decimal:
+        if year in reported:
+            return reported[year]
+        if year < first:
+            estimated.add(year)
+            return reported[first]  # flat before our history: the usual approximation
+        return Decimal("0")
+
+    years = sorted(reported)
+    asset = {y: sum((rd(y - k) * Decimal(life - k) / Decimal(life) for k in range(life)), Decimal("0")) for y in years}
+    amortisation = {y: sum((rd(y - k) / Decimal(life) for k in range(1, life + 1)), Decimal("0")) for y in years}
+    return ResearchAsset(life, asset, amortisation, {y: reported[y] for y in years}, len(estimated))
+
+
 def _nwc(p: FinancialPeriod) -> Decimal | None:
     if p.current_assets is None or p.current_liabilities is None:
         return None
@@ -286,8 +322,18 @@ def effective_tax_rate(p: FinancialPeriod, marginal: Decimal) -> tuple[Decimal, 
     return marginal, "marginal rate (effective rate not reported)"
 
 
-def fundamentals(periods: list[FinancialPeriod], marginal_tax: Decimal) -> Fundamentals:
-    """Expected growth = reinvestment rate × return on capital, over up to the last 3 years (smooths lumpy capex)."""
+def adjusted_operating_income(p: FinancialPeriod, research: ResearchAsset | None) -> Decimal | None:
+    if p.operating_income is None:
+        return None
+    return p.operating_income + (research.adjustment(p.fiscal_year) if research else Decimal("0"))
+
+
+def fundamentals(periods: list[FinancialPeriod], marginal_tax: Decimal, research: ResearchAsset | None = None) -> Fundamentals:
+    """Expected growth = reinvestment rate × return on capital, over up to the last 3 years (smooths lumpy capex).
+
+    With `research`, R&D is treated as capital spending: operating income adds back R&D less its amortisation, the
+    same amount counts as reinvestment, and the unamortised research asset is part of invested capital.
+    """
     periods = sorted(periods, key=lambda p: p.fiscal_year)
     notes: list[str] = []
     window = [(prev, cur) for prev, cur in zip(periods, periods[1:]) if cur.operating_income is not None][-3:]
@@ -295,10 +341,12 @@ def fundamentals(periods: list[FinancialPeriod], marginal_tax: Decimal) -> Funda
     used_years = []
     for prev, cur in window:
         tax, _ = effective_tax_rate(cur, marginal_tax)
-        after_tax = cur.operating_income * (1 - tax)
+        after_tax = adjusted_operating_income(cur, research) * (1 - tax)
         if cur.capital_expenditure is None:
             continue
         net_capex = cur.capital_expenditure - (cur.depreciation_amortization or 0)
+        if research:
+            net_capex += research.adjustment(cur.fiscal_year)
         if cur.depreciation_amortization is None:
             notes.append(f"FY{cur.fiscal_year}: depreciation not reported, so net capex = capex (conservative).")
         now, before = _nwc(cur), _nwc(prev)
@@ -311,9 +359,11 @@ def fundamentals(periods: list[FinancialPeriod], marginal_tax: Decimal) -> Funda
     roc = None
     if len(periods) >= 2 and periods[-1].operating_income is not None:
         capital = _invested_capital(periods[-2])
+        if capital is not None and research:
+            capital += research.asset.get(periods[-2].fiscal_year, Decimal("0"))
         tax, _ = effective_tax_rate(periods[-1], marginal_tax)
         if capital and capital > 0:
-            roc = periods[-1].operating_income * (1 - tax) / capital
+            roc = adjusted_operating_income(periods[-1], research) * (1 - tax) / capital
 
     if rr is not None and roc is not None and rr > 0:
         growth = min(max(rr * roc, Decimal("0")), GROWTH_CAP)
@@ -333,6 +383,36 @@ def fundamentals(periods: list[FinancialPeriod], marginal_tax: Decimal) -> Funda
     growth = min(max(growth, Decimal("0")), GROWTH_CAP)
     notes.append("Reinvestment is negative or capital isn't meaningful, so growth falls back to the recent revenue CAGR.")
     return Fundamentals(rr, roc, growth, "revenue CAGR (fallback)", used_years, notes)
+
+
+def implied_high_growth(inputs: DcfInputs, price: Decimal) -> Decimal | None:
+    """The high-growth rate at which value per share equals `price`, all else as stored (a reverse DCF).
+
+    None when no growth between 0% and 60% gets there (the price needs more than any plausible growth, or is
+    below even the no-growth value).
+    """
+    def value(growth: Decimal) -> Decimal | None:
+        try:
+            return Decimal(value_firm(replace(inputs, high_growth=growth, reinvestment_rate_override=None),
+                                      with_sensitivity=False)["bridge"]["value_per_share"])
+        except (InvalidAssumptions, ValuationSkipped):
+            return None
+
+    lo, hi = Decimal("0"), Decimal("0.60")
+    v_lo, v_hi = value(lo), value(hi)
+    if v_lo is None or v_hi is None or not (min(v_lo, v_hi) <= price <= max(v_lo, v_hi)):
+        return None
+    rising = v_hi > v_lo  # growth adds value only when return on capital beats the cost of capital
+    for _ in range(40):
+        mid = (lo + hi) / 2
+        v = value(mid)
+        if v is None:
+            return None
+        if (v < price) == rising:
+            lo = mid
+        else:
+            hi = mid
+    return _q((lo + hi) / 2, Decimal("0.0001"))
 
 
 def apply_overrides(inputs: DcfInputs, overrides: dict) -> DcfInputs:
