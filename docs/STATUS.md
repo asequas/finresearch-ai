@@ -82,7 +82,7 @@ misleading cancel copy; quote highlight missing for table rows.
 | D4 | Low | Debt uses reported long-term debt only; stated in every report's limitations. |
 | D5 | Low | No structured logging beyond stdlib. (Per-call cost tracking and caps: done, ADR 0009.) |
 | D6 | Low | Development identity: every request is `dev@finresearch.local`. Ownership checks exist; authentication doesn't. |
-| D10 | Medium | CI/CD (ADR 0013) is *implemented but unverified* until its first CI run: the image builds, the multi-arch publish and the compose smoke test have only been checked locally (YAML, `nginx -t`, `docker compose config`), and the SSH deploy has no server yet. |
+| D10 | Low | The SSH deploy step (ADR 0013) is *implemented but unverified*: there is no server yet. The image builds on amd64 and arm64, the stack smoke test (a stub research job through nginx) and the GHCR multi-arch publish are verified (CI run 41239201319). |
 
 ## Current phase + next 3 tasks
 
