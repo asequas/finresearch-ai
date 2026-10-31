@@ -35,7 +35,8 @@ def test_a_completed_job_carries_a_sourced_dcf_valuation_and_citable_metrics(mak
     inputs = valuation.inputs
     assert inputs["risk_free_rate"] == "0.0450" and "Treasury" in inputs["sources"]["risk_free_rate"]
     assert inputs["base_ebit"] == "30250000000.0000" and inputs["effective_tax_rate"] == "0.2"  # 6B tax / 30B pre-tax
-    assert "Machinery" in inputs["sources"]["unlevered_beta"]
+    assert "Machinery" in inputs["sources"]["unlevered_beta"] and inputs["sources"]["industry"] == "Machinery"
+    assert inputs["lease_liabilities"] == "0"  # already inside operating income
     assert len(valuation.result["projection"]) == 10 and valuation.result["sensitivity"]["value_per_share"]
     assert set(metrics) == {"dcf_value_per_share", "dcf_equity_value", "dcf_operating_value", "dcf_cost_of_capital",
                             "dcf_high_growth", "dcf_stable_growth", "dcf_terminal_share"}
@@ -81,3 +82,36 @@ def test_revaluing_replaces_rather_than_duplicates_and_spends_nothing(make_job, 
         assert session.scalar(select(func.count()).select_from(CalculatedMetric).where(
             CalculatedMetric.research_job_id == job.id, CalculatedMetric.metric_key == "dcf_value_per_share")) == 1
         assert session.scalar(select(func.count()).select_from(LlmCall)) == 0  # the fakes never reach a model
+
+
+def test_backfill_values_old_jobs_filling_only_missing_facts(make_job, tmp_path):
+    from datetime import date
+
+    from sqlalchemy import delete
+
+    from backend.models import FinancialSnapshot
+    from backend.valuation.backfill import backfill
+    from backend.valuation.market import RiskFreeRate
+
+    job, _ = _run(make_job, tmp_path)
+    with SessionLocal() as session:  # make it look like a job from before the DCF existed
+        session.execute(delete(Valuation).where(Valuation.research_job_id == job.id))
+        session.execute(delete(CalculatedMetric).where(CalculatedMetric.metric_key.startswith("dcf_")))
+        for snapshot in session.scalars(select(FinancialSnapshot).where(FinancialSnapshot.research_job_id == job.id)):
+            snapshot.depreciation_amortization = snapshot.income_tax_expense = snapshot.pretax_income = None
+            snapshot.revenue = snapshot.revenue + 1  # a stored value that must not be overwritten
+        session.commit()
+
+    lines = backfill(["wdgt"], sec=FakeSec(tmp_path),
+                     risk_free=RiskFreeRate(Decimal("0.0450"), date(2026, 10, 30), "test"))
+
+    with SessionLocal() as session:
+        valuation = session.scalar(select(Valuation).where(Valuation.research_job_id == job.id))
+        fy24 = session.scalar(select(FinancialSnapshot).where(
+            FinancialSnapshot.research_job_id == job.id, FinancialSnapshot.fiscal_year == 2024))
+    assert len(lines) == 1 and "a share" in lines[0]
+    assert valuation.status == "valued"
+    assert fy24.depreciation_amortization == Decimal("3000000000.0000")
+    assert fy24.provenance["depreciation_amortization"]["concept"] == "us-gaap:DepreciationAndAmortization"
+    assert fy24.revenue == Decimal("121000000001.0000")  # untouched
+    assert backfill(["WDGT"], sec=FakeSec(tmp_path), risk_free=RiskFreeRate(Decimal("0.045"), date(2026, 10, 30), "t")) == []

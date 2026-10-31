@@ -80,7 +80,8 @@ def default_inputs(
         "cash": f"Cash and equivalents, {fy}",
         "non_operating_assets": f"Short-term investments, {fy}",
         "debt": f"Long-term debt, {fy}",
-        "lease_liabilities": f"Operating lease liabilities, {fy}",
+        "lease_liabilities": "not subtracted: operating lease costs are already deducted in operating income (ASC 842)",
+        "industry": industry.name,
         "minority_interest": f"Minority interest, {fy}",
         "shares": f"Diluted weighted-average shares, {fy}",
     }
@@ -91,7 +92,7 @@ def default_inputs(
         equity_risk_premium=ERP, unlevered_beta=industry.unlevered_beta_cash_corrected,
         debt_to_capital=industry.debt_to_capital, default_spread=rating.spread,
         cash=base.cash or Decimal("0"), non_operating_assets=base.short_term_investments or Decimal("0"),
-        debt=base.debt or Decimal("0"), lease_liabilities=base.lease_liabilities or Decimal("0"),
+        debt=base.debt or Decimal("0"), lease_liabilities=Decimal("0"),
         minority_interest=base.minority_interest or Decimal("0"), shares=shares, sources=sources,
     )
     if base.debt is None:

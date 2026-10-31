@@ -31,7 +31,6 @@ ASSUMPTIONS = [
     ("cash", "Cash", "USD", False),
     ("non_operating_assets", "Short-term investments", "USD", False),
     ("debt", "Debt", "USD", False),
-    ("lease_liabilities", "Lease liabilities", "USD", False),
     ("minority_interest", "Minority interest", "USD", False),
     ("shares", "Diluted shares", "shares", False),
 ]
