@@ -29,6 +29,16 @@ target_metadata = Base.metadata
 # ... etc.
 
 
+# LangGraph's checkpoint tables are created by a migration from frozen SQL and have no ORM models;
+# autogenerate must not propose dropping them.
+CHECKPOINT_TABLES = {"checkpoint_migrations", "checkpoints", "checkpoint_blobs", "checkpoint_writes"}
+
+
+def include_object(obj, name, type_, reflected, compare_to):
+    table = obj if type_ == "table" else getattr(obj, "table", None)
+    return getattr(table, "name", name) not in CHECKPOINT_TABLES
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -79,6 +89,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
+            include_object=include_object,
         )
 
         with context.begin_transaction():
