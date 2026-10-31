@@ -341,10 +341,10 @@ def dcf_metrics(inputs, result: dict, period: str) -> list[dict]:
          "equity value ÷ diluted shares",
          {"equity_value": inp("dcf_equity_value", bridge["equity_value"]), "shares": inp("diluted_shares", bridge["shares"], "shares")}),
         ("dcf_equity_value", "DCF equity value", bridge["equity_value"], "USD",
-         "operating value + cash + short-term investments − debt − lease liabilities − minority interest",
+         "operating value + cash + short-term investments − debt − minority interest",
          {k: inp(k, bridge[v]) for k, v in [("operating_value", "operating_value"), ("cash", "cash"),
                                             ("short_term_investments", "non_operating_assets"), ("debt", "debt"),
-                                            ("lease_liabilities", "lease_liabilities"), ("minority_interest", "minority_interest")]}),
+                                            ("minority_interest", "minority_interest")]}),
         ("dcf_operating_value", "DCF operating value", bridge["operating_value"], "USD",
          "present value of free cash flows to the firm + present value of the terminal value",
          {"pv_fcff": inp("pv_fcff", bridge["present_value_of_fcff"]), "pv_terminal": inp("pv_terminal", bridge["present_value_of_terminal"])}),
@@ -379,53 +379,63 @@ class Valuate:
     weight: int = 3
 
     def run(self, ctx: JobContext) -> None:
-        from backend.valuation.assumptions import default_inputs
-        from backend.valuation.dcf import InvalidAssumptions, ValuationSkipped, value_firm
-
         with _read(ctx) as session:
-            snapshots = sorted(
-                session.scalars(select(FinancialSnapshot).where(FinancialSnapshot.research_job_id == ctx.job_id)),
-                key=lambda s: s.fiscal_year or 0,
-            )
-            company = _company(session, ctx.job_id)
-        periods = [
-            FinancialPeriod(fiscal_year=s.fiscal_year, **{n: getattr(s, n) for n in SNAPSHOT_FIELDS if n != "diluted_shares"})
-            for s in snapshots
-        ]
-        shares = snapshots[-1].diluted_shares if snapshots else None
-        values: dict = dict(calculation_version="dcf-1.0", method="fcff_three_stage")
-        metrics: list[dict] = []
-        try:
-            inputs, notes = default_inputs(periods, shares=shares, sic=company.sic, risk_free=self.services.risk_free_rate())
-            result = value_firm(inputs)
-            values.update(
-                status="valued", skip_reason=None, calculation_version=result["calculation_version"],
-                value_per_share=Decimal(result["bridge"]["value_per_share"]), equity_value=Decimal(result["bridge"]["equity_value"]),
-                operating_value=Decimal(result["bridge"]["operating_value"]),
-                industry=inputs.sources["unlevered_beta"].split(": ", 1)[-1].split(" (")[0],
-                inputs=result["inputs"], result={k: result[k] for k in ("derived", "projection", "terminal", "bridge", "sensitivity")},
-                warnings=notes + result["warnings"],
-            )
-            metrics = dcf_metrics(inputs, result, f"FY{inputs.base_year}")
-        except (ValuationSkipped, InvalidAssumptions) as exc:
-            values.update(status="skipped", skip_reason=str(exc), value_per_share=None, equity_value=None,
-                          operating_value=None, industry=None, inputs=None, result=None, warnings=[])
-
+            values, metrics = compute_valuation(session, ctx.job_id, self.services.risk_free_rate())
         with ctx.transaction() as session:
-            session.execute(
-                insert(Valuation)
-                .values(research_job_id=ctx.job_id, created_at=datetime.now(timezone.utc), **values)
-                .on_conflict_do_update(index_elements=["research_job_id"], set_={**values, "created_at": datetime.now(timezone.utc)})
-            )
-            session.execute(delete(CalculatedMetric).where(
-                CalculatedMetric.research_job_id == ctx.job_id, CalculatedMetric.metric_key.startswith(DCF_METRIC_PREFIX)
-            ))
-            for metric in metrics:
-                session.add(CalculatedMetric(research_job_id=ctx.job_id, ticker=ctx.ticker, fiscal_year=None, **metric))
+            save_valuation(session, ctx.job_id, ctx.ticker, values, metrics)
         ctx.usage.metadata = {
             "status": values["status"], "value_per_share": str(values.get("value_per_share")),
             "reason": values.get("skip_reason"),
         }
+
+
+def compute_valuation(session: Session, job_id: UUID, risk_free) -> tuple[dict, list[dict]]:
+    """The job's default DCF from its stored snapshots: (valuations row values, dcf_* metric rows). Pure reads."""
+    from backend.valuation.assumptions import default_inputs
+    from backend.valuation.dcf import InvalidAssumptions, ValuationSkipped, value_firm
+
+    snapshots = sorted(
+        session.scalars(select(FinancialSnapshot).where(FinancialSnapshot.research_job_id == job_id)),
+        key=lambda s: s.fiscal_year or 0,
+    )
+    company = _company(session, job_id)
+    periods = [
+        FinancialPeriod(fiscal_year=s.fiscal_year, **{n: getattr(s, n) for n in SNAPSHOT_FIELDS if n != "diluted_shares"})
+        for s in snapshots
+    ]
+    shares = snapshots[-1].diluted_shares if snapshots else None
+    values: dict = dict(calculation_version="dcf-1.0", method="fcff_three_stage")
+    try:
+        inputs, notes = default_inputs(periods, shares=shares, sic=company.sic, risk_free=risk_free)
+        result = value_firm(inputs)
+    except (ValuationSkipped, InvalidAssumptions) as exc:
+        values.update(status="skipped", skip_reason=str(exc), value_per_share=None, equity_value=None,
+                      operating_value=None, industry=None, inputs=None, result=None, warnings=[])
+        return values, []
+    values.update(
+        status="valued", skip_reason=None, calculation_version=result["calculation_version"],
+        value_per_share=Decimal(result["bridge"]["value_per_share"]), equity_value=Decimal(result["bridge"]["equity_value"]),
+        operating_value=Decimal(result["bridge"]["operating_value"]),
+        industry=inputs.sources["industry"],
+        inputs=result["inputs"], result={k: result[k] for k in ("derived", "projection", "terminal", "bridge", "sensitivity")},
+        warnings=notes + result["warnings"],
+    )
+    return values, dcf_metrics(inputs, result, f"FY{inputs.base_year}")
+
+
+def save_valuation(session: Session, job_id: UUID, ticker: str, values: dict, metrics: list[dict]) -> None:
+    """Upsert the valuation and replace the job's dcf_* metrics (idempotent). The caller owns the transaction."""
+    now = datetime.now(timezone.utc)
+    session.execute(
+        insert(Valuation)
+        .values(research_job_id=job_id, created_at=now, **values)
+        .on_conflict_do_update(index_elements=["research_job_id"], set_={**values, "created_at": now})
+    )
+    session.execute(delete(CalculatedMetric).where(
+        CalculatedMetric.research_job_id == job_id, CalculatedMetric.metric_key.startswith(DCF_METRIC_PREFIX)
+    ))
+    for metric in metrics:
+        session.add(CalculatedMetric(research_job_id=job_id, ticker=ticker, fiscal_year=None, **metric))
 
 
 # ---- 5. Index documents ----------------------------------------------------
@@ -753,8 +763,9 @@ def build_limitations(session: Session, job_id: UUID) -> list[str]:
     valuation = session.scalar(select(Valuation).where(Valuation.research_job_id == job_id))
     if valuation is not None and valuation.status == "valued":
         limitations.append(
-            "The DCF uses industry-average beta and debt ratio (no share price), diluted weighted shares, and leaves out "
-            "employee options and cross-holdings; small changes in growth or cost of capital move it a lot (see its sensitivity table)."
+            "The DCF uses industry-average beta and debt ratio (no share price) and diluted weighted shares; it leaves out "
+            "employee options and cross-holdings, and expenses R&D rather than capitalising it, which understates growth "
+            "investment at R&D-heavy companies. Small changes in growth or cost of capital move it a lot (see its sensitivity table)."
         )
     elif valuation is not None:
         limitations.append(f"No DCF value: {valuation.skip_reason}")
