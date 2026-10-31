@@ -19,6 +19,9 @@ if not make_url(TEST_DATABASE_URL).database.endswith("_test"):
     )
 
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+# Tests never reach Gemini: no key, free-tier accounting, and every SDK request path is blocked below.
+os.environ["GEMINI_API_KEY"] = ""
+os.environ["GEMINI_BILLING"] = "free"
 # Tests never download models; the cross-encoder has its own opt-in test (pytest -m model).
 os.environ.setdefault("RERANKER", "none")
 
@@ -29,6 +32,33 @@ from sqlalchemy import text  # noqa: E402
 
 from backend.core.database import engine  # noqa: E402
 from backend.models import Base  # noqa: E402
+
+
+class GeminiCallBlocked(RuntimeError):
+    pass
+
+
+@pytest.fixture(scope="session", autouse=True)
+def no_gemini_calls():
+    """Fail loudly if any test tries to reach the Gemini API: the project's key is billed.
+
+    Covers the google-genai SDK's sync and async request methods, which both GeminiClient and
+    langchain-google-genai go through. Tests use FakeLLM / ScriptedResearcher instead.
+    """
+    from google.genai import models
+
+    def blocked(*_args, **_kwargs):
+        raise GeminiCallBlocked("A test tried to call the Gemini API. Use the fakes in tests/fakes.py.")
+
+    patched = []
+    for cls in (models.Models, models.AsyncModels):
+        for name in ("generate_content", "generate_content_stream", "embed_content", "count_tokens"):
+            if hasattr(cls, name):
+                patched.append((cls, name, getattr(cls, name)))
+                setattr(cls, name, blocked)
+    yield
+    for cls, name, original in patched:
+        setattr(cls, name, original)
 
 
 @pytest.fixture(scope="session", autouse=True)
