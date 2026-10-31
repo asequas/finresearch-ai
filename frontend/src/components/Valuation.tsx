@@ -109,12 +109,86 @@ function WhatIfPanel({ data, onResult, onReset, pending, error, submit }: {
   );
 }
 
+const POSITION = {
+  below_range: { label: "Looks undervalued", tone: "bg-[var(--pill-positive-bg)] text-[var(--pill-positive-ink)]" },
+  within_range: { label: "Roughly fair value", tone: "bg-[var(--pill-neutral-bg)] text-[var(--pill-neutral-ink)]" },
+  above_range: { label: "Looks overvalued", tone: "bg-[var(--pill-negative-bg)] text-[var(--pill-negative-ink)]" },
+} as const;
+
+function readPrice(jobId: string): string {
+  try { return localStorage.getItem(`price:${jobId}`) ?? ""; } catch { return ""; }
+}
+
+function PriceCheck({ jobId, overrides }: { jobId: string; overrides: WhatIf }) {
+  const check = useWhatIf(jobId);
+  const [price, setPrice] = useState(() => readPrice(jobId));
+  const result = check.data?.price_check;
+  const send = (e: FormEvent) => {
+    e.preventDefault();
+    const value = Number(price);
+    if (!(value > 0)) return;
+    try { localStorage.setItem(`price:${jobId}`, String(value)); } catch { /* private mode: not remembered */ }
+    check.mutate({ ...overrides, market_price: String(value) });
+  };
+  return (
+    <div className="mt-4 rounded-[6px] border border-control px-4 py-4">
+      <form onSubmit={send} className="flex flex-wrap items-end gap-3">
+        <label className="block">
+          <span className="block text-small text-muted">Current share price (you enter it; the app fetches no prices)</span>
+          <span className="mt-1 flex items-center gap-1.5">
+            <span className="text-muted">$</span>
+            <input type="number" min="0.01" step="0.01" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)}
+              placeholder="e.g. 245.50" aria-label="Current share price in US dollars"
+              className="num h-[34px] w-36 rounded-[6px] border border-control bg-transparent px-3 focus:border-muted focus:outline-none" />
+          </span>
+        </label>
+        <Button type="submit" variant="primary" disabled={check.isPending || !(Number(price) > 0)}>
+          {check.isPending ? "Comparing…" : "Compare with the estimate"}
+        </Button>
+        {check.isError && <span role="alert" className="text-[var(--pill-negative-ink)]">{check.error.message}</span>}
+      </form>
+      {result && (
+        <div className="mt-4" aria-live="polite">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className={`inline-flex h-7 items-center rounded-full px-3 font-medium ${POSITION[result.position as keyof typeof POSITION].tone}`}>
+              {POSITION[result.position as keyof typeof POSITION].label}
+            </span>
+            <span className="num text-soft">
+              Price {money(result.price)} against an estimate of {money(result.value_per_share)} ({money(result.range_low)} to {money(result.range_high)})
+            </span>
+          </div>
+          <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div>
+              <dt className="text-small text-muted">Estimate vs price</dt>
+              <dd className="num text-card">{pct(result.gap, { sign: true, digits: 0 })}</dd>
+            </div>
+            <div>
+              <dt className="text-small text-muted">Growth the price implies</dt>
+              <dd className="num text-card">{result.implied_high_growth ? `${pct(result.implied_high_growth, { digits: 1 })} a year` : "out of range"}</dd>
+            </div>
+            <div>
+              <dt className="text-small text-muted">Growth assumed here</dt>
+              <dd className="num text-card">{pct(check.data?.assumptions.find((a) => a.key === "high_growth")?.value, { digits: 1 })} a year</dd>
+            </div>
+          </dl>
+          <p className="mt-3 max-w-[80ch] text-soft">{result.explanation}</p>
+          <p className="mt-2 max-w-[80ch] text-small text-muted">
+            This compares a price with an estimate built from the assumptions below; change them with "What if" and compare again.
+            It is decision support, not investment advice: the estimate can be wrong, and the filings can't see everything the market prices in.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** The deterministic DCF: headline value, its drivers, every sourced assumption, and a what-if. */
 export function ValuationSection({ jobId }: { jobId: string }) {
   const stored = useValuation(jobId);
   const whatIf = useWhatIf(jobId);
   const [open, setOpen] = useState(false);
   const [variant, setVariant] = useState<ValuationData | null>(null);
+  const [overrides, setOverrides] = useState<WhatIf>({});
 
   if (stored.isError) {
     const missing = stored.error instanceof ApiError && stored.error.status === 404;
@@ -159,14 +233,15 @@ export function ValuationSection({ jobId }: { jobId: string }) {
         </div>
         <p className="mt-3 max-w-[80ch] text-small text-muted">
           An estimate of what the business is worth from its cash flows: free cash flow to the firm for FY{(data.base_year ?? 0) + 1}–FY{(data.base_year ?? 0) + data.projection.length},
-          then a terminal value, discounted at the cost of capital ({data.industry} industry data). It is not compared with the share price,
-          and it is only as good as the assumptions below.
+          then a terminal value, discounted at the cost of capital ({data.industry} industry data). Enter today's share price to see
+          where it sits against this estimate; the estimate is only as good as the assumptions below.
         </p>
+        <PriceCheck key={JSON.stringify(overrides)} jobId={jobId} overrides={overrides} />
         {open && (
           <div className="mt-4">
             <WhatIfPanel data={base} onResult={!!variant} pending={whatIf.isPending} error={whatIf.error}
-              onReset={() => { setVariant(null); whatIf.reset(); }}
-              submit={(body) => whatIf.mutate(body, { onSuccess: setVariant })} />
+              onReset={() => { setVariant(null); setOverrides({}); whatIf.reset(); }}
+              submit={(body) => whatIf.mutate(body, { onSuccess: (data) => { setVariant(data); setOverrides(body); } })} />
           </div>
         )}
       </div>
