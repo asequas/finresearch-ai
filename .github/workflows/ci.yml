@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -52,3 +59,61 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npx vite build
+
+  # Build the production images natively for both architectures (x86 servers and ARM ones such as Oracle's
+  # free tier), boot the whole stack from them, and run one research job through nginx. On main, push the
+  # tested images to GHCR; the Deploy workflow ships exactly these.
+  images:
+    needs: [backend, frontend]
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Image names and tag
+        run: |
+          echo "REGISTRY=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+          echo "TAG=sha-${GITHUB_SHA::12}" >> "$GITHUB_ENV"
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Build
+        run: |
+          for image in backend web; do
+            docker build -f "docker/Dockerfile.$image" -t "$REGISTRY/$image:$TAG" \
+              --cache-from "$REGISTRY/$image:latest" --build-arg BUILDKIT_INLINE_CACHE=1 .
+          done
+      - name: Smoke test the stack (stub pipeline, no external calls)
+        run: deploy/ci-smoke.sh "$TAG"
+      - name: Push
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          for image in backend web; do
+            docker tag "$REGISTRY/$image:$TAG" "$REGISTRY/$image:$TAG-${{ matrix.arch }}"
+            docker push --quiet "$REGISTRY/$image:$TAG-${{ matrix.arch }}"
+          done
+
+  # One tag per commit that works on either architecture, plus "latest".
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Multi-architecture tags
+        run: |
+          REGISTRY="ghcr.io/${GITHUB_REPOSITORY,,}"; TAG="sha-${GITHUB_SHA::12}"
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for image in backend web; do
+            docker buildx imagetools create -t "$REGISTRY/$image:$TAG" -t "$REGISTRY/$image:latest" \
+              "$REGISTRY/$image:$TAG-amd64" "$REGISTRY/$image:$TAG-arm64"
+          done
