@@ -25,6 +25,8 @@ Real research on Amazon, Microsoft and NVIDIA filings, run end to end through th
 | **Report.** The answer first, then summary, financials, scenarios, risks and the evidence ledger. | **Claim inspector.** Every claim opens to the filing passage with the quoted words highlighted. |
 | ![Company workspace](docs/screenshots/company.png) | ![Phone](docs/screenshots/phone-report.png) |
 | **Company workspace.** Five years of reported figures and every report on the company. | **Phone.** The same report, laid out for a small screen. |
+| ![Costs](docs/screenshots/costs.png) | |
+| **Costs.** Every model call priced from its token counts, against daily and monthly caps; by day, model, stage and job. | |
 
 ## What makes it trustworthy
 

@@ -77,11 +77,11 @@ function niceMax(value: number): number {
 }
 
 function Th({ children, right = false }: { children: ReactNode; right?: boolean }) {
-  return <th scope="col" className={`px-3 py-2 text-small font-normal text-muted first:pl-6 last:pr-6 ${right ? "text-right" : "text-left"}`}>{children}</th>;
+  return <th scope="col" className={`px-2.5 py-2 text-small font-normal text-muted first:pl-6 last:pr-6 ${right ? "text-right" : "text-left"}`}>{children}</th>;
 }
 
 function Td({ children, right = false, mono = false }: { children: ReactNode; right?: boolean; mono?: boolean }) {
-  return <td className={`px-3 py-2.5 whitespace-nowrap first:pl-6 last:pr-6 ${right ? "text-right" : ""} ${mono ? "num" : ""}`}>{children}</td>;
+  return <td className={`px-2.5 py-2.5 whitespace-nowrap first:pl-6 last:pr-6 ${right ? "text-right" : ""} ${mono ? "num" : ""}`}>{children}</td>;
 }
 
 export function Costs() {
@@ -163,12 +163,12 @@ export function Costs() {
                 <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2 [&>*]:min-w-0">
                   <Panel id="models" title="By model" aside={<span>Last {days} days</span>}>
                     <div className="overflow-x-auto pb-3">
-                      <table className="w-full min-w-[560px]">
+                      <table className="w-full min-w-[520px]">
                         <thead><tr className="border-b border-rule"><Th>Model</Th><Th right>Calls</Th><Th right>Input</Th><Th right>Cached</Th><Th right>Output</Th><Th right>Cost</Th></tr></thead>
                         <tbody className="divide-y divide-rule">
                           {data.models.map((m) => (
                             <tr key={`${m.model}-${m.operation}`}>
-                              <Td><span className="num">{m.model}</span>{m.operation === "embed" && <span className="ml-2 text-small text-muted">embeddings</span>}</Td>
+                              <Td><span className="num">{m.model}</span>{m.operation === "embed" && <span className="block text-small text-muted">embeddings</span>}</Td>
                               <Td right mono>{m.calls.toLocaleString()}</Td>
                               <Td right mono>{tokens(m.input_tokens)}</Td>
                               <Td right mono>{tokens(m.cached_tokens)}</Td>
