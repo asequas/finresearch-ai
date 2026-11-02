@@ -1,0 +1,405 @@
+<!doctype html>
+<!--
+  Source for the README diagrams. Open with ?d=system|pipeline|valuation&theme=dark|light and screenshot #canvas
+  (see docs/diagrams/README.md). 1200px wide with large type so text stays legible at GitHub's README width.
+  Colours follow frontend/DESIGN.md; backgrounds match GitHub's light and dark themes.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FinResearch diagrams</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d1117; --card: #15161b; --card-2: #1d1e25; --line: #30323b; --rule: #262830;
+    --text: #f2f3f5; --soft: #c9ccd2; --muted: #969ba5;
+    --accent: #2bb3a3; --accent-bg: rgba(43,179,163,.13); --accent-line: rgba(43,179,163,.6);
+    --llm: #b392f0; --llm-bg: rgba(179,146,240,.14); --llm-line: rgba(179,146,240,.6);
+    --ext: #e0a84a; --ext-bg: rgba(224,168,74,.12); --ext-line: rgba(224,168,74,.55);
+    --db: #58a6ff; --db-bg: rgba(88,166,255,.10); --db-line: rgba(88,166,255,.55);
+    --arrow: #7a808b; --good: #44a282; --bad: #e5566f;
+  }
+  :root[data-theme="light"] {
+    --bg: #ffffff; --card: #f7f8fa; --card-2: #edf0f3; --line: #d3d7dd; --rule: #e3e6ea;
+    --text: #111316; --soft: #30343a; --muted: #5a5f68;
+    --accent: #0e8a7d; --accent-bg: rgba(14,138,125,.09); --accent-line: rgba(14,138,125,.6);
+    --llm: #7c3aed; --llm-bg: rgba(124,58,237,.07); --llm-line: rgba(124,58,237,.5);
+    --ext: #a16207; --ext-bg: rgba(161,98,7,.08); --ext-line: rgba(161,98,7,.5);
+    --db: #1f6feb; --db-bg: rgba(31,111,235,.07); --db-line: rgba(31,111,235,.5);
+    --arrow: #858b95; --good: #247b50; --bad: #c4242a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: "IBM Plex Sans", system-ui, sans-serif; }
+  #canvas { width: 1200px; padding: 40px 44px 44px; position: relative; background: var(--bg); }
+  .head { margin-bottom: 30px; }
+  .kicker { font: 600 14px/1 "IBM Plex Mono", monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+  h1 { margin: 12px 0 0; font-size: 32px; line-height: 1.2; font-weight: 600; letter-spacing: -.01em; }
+  .sub { margin-top: 8px; color: var(--muted); font-size: 18px; line-height: 1.45; }
+  .legend { display: flex; gap: 20px; font-size: 15px; color: var(--soft); margin-top: 14px; }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .legend i { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+  .card { background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; padding: 18px 20px; position: relative; }
+  .card h3 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+  .what { color: var(--muted); font-size: 16px; line-height: 1.4; margin-bottom: 12px; }
+  .label { font: 600 13px/1 "IBM Plex Mono", monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  ul.l { margin: 0; padding: 0; list-style: none; font-size: 16.5px; color: var(--soft); }
+  ul.l li { padding: 7px 0; border-top: 1px solid var(--rule); line-height: 1.35; }
+  ul.l li:first-child { border-top: 0; padding-top: 0; }
+  code, .mono { font-family: "IBM Plex Mono", monospace; font-size: .93em; }
+  .chip { border-radius: 11px; padding: 12px 14px; line-height: 1.35; border: 1.5px solid var(--line); background: var(--card-2); }
+  .chip b { display: block; font-size: 17px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+  .chip span { color: var(--muted); font-size: 15px; }
+  .t-code { border-color: var(--accent-line); background: var(--accent-bg); }
+  .t-llm { border-color: var(--llm-line); background: var(--llm-bg); }
+  .t-ext { border-color: var(--ext-line); background: var(--ext-bg); }
+  .t-db { border-color: var(--db-line); background: var(--db-bg); }
+  .tag { display: inline-block; font: 600 12px/20px "IBM Plex Mono", monospace; padding: 0 7px; border-radius: 5px; vertical-align: 2px; margin-left: 6px; letter-spacing: .04em; }
+  .tag.code { background: var(--accent-bg); color: var(--accent); border: 1px solid var(--accent-line); }
+  .tag.llm { background: var(--llm-bg); color: var(--llm); border: 1px solid var(--llm-line); }
+  .pill { font: 500 15px/1 "IBM Plex Mono", monospace; padding: 8px 10px; border-radius: 7px; border: 1.5px solid var(--line); background: var(--card-2); color: var(--soft); }
+  .pill.code { border-color: var(--accent-line); background: var(--accent-bg); }
+  .pill.llm { border-color: var(--llm-line); background: var(--llm-bg); }
+  .pills { display: flex; flex-wrap: wrap; gap: 7px; }
+  svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  .wl { font: 500 14.5px "IBM Plex Mono", monospace; fill: var(--soft); }
+  .wl-bg { fill: var(--bg); }
+  .diagram { display: none; }
+  .diagram.on { display: block; }
+  .formula { font: 500 15.5px/1.6 "IBM Plex Mono", monospace; color: var(--text); background: var(--card-2); border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; margin-top: 10px; white-space: pre; }
+
+  /* system */
+  .rowA { display: grid; grid-template-columns: 350px 250px 1fr; gap: 72px; align-items: center; }
+  .rowB { display: grid; grid-template-columns: 1fr 600px; gap: 130px; align-items: start; margin-top: 92px; }
+  .db-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .ext-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 74px; }
+  .ext-row .chip b { font-size: 16px; }
+  .ext-row .chip span { font-size: 14px; }
+  .cicd { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 16px 20px; margin-top: 30px; }
+  .cicd .step { font: 500 14px "IBM Plex Mono", monospace; color: var(--soft); padding: 8px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--card-2); }
+  .cicd .sep { color: var(--muted); font-size: 18px; }
+
+  /* pipeline */
+  .pipe { display: grid; grid-template-columns: 420px 1fr; gap: 80px; align-items: start; margin-right: 96px; }
+  .group { border: 1.5px dashed var(--line); border-radius: 16px; padding: 20px; position: relative; }
+  .vstack { display: flex; flex-direction: column; gap: 26px; }
+  .box { border-radius: 12px; padding: 13px 16px; border: 1.5px solid var(--line); background: var(--card); position: relative; }
+  .box h4 { margin: 0; font-size: 19px; font-weight: 600; display: flex; align-items: baseline; gap: 10px; }
+  .box h4 .n { font: 600 14px "IBM Plex Mono", monospace; color: var(--muted); }
+  .box p { margin: 5px 0 0; color: var(--muted); font-size: 15.5px; line-height: 1.4; }
+  .box.code { border-color: var(--accent-line); }
+  .box.llm { border-color: var(--llm-line); }
+  .fan { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .fan .box { padding: 11px 12px; }
+  .fan .box h4 { font-size: 16.5px; }
+  .tools { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .tools span { font: 500 12.5px "IBM Plex Mono", monospace; padding: 4px 6px; border-radius: 6px; background: var(--card-2); border: 1px solid var(--line); color: var(--soft); }
+  .checks { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; font-size: 15.5px; color: var(--soft); }
+
+  /* valuation */
+  .vgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 64px 56px; }
+  .span2 { grid-column: span 2; }
+  .verdict { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .verdict span { font-size: 14px; font-weight: 600; padding: 6px 11px; border-radius: 999px; }
+  .v-under { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+  .v-fair { background: var(--card-2); color: var(--soft); border: 1px solid var(--line); }
+  .v-over { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+  .example { display: grid; grid-template-columns: repeat(4, 1fr); border: 1.5px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 40px; }
+  .example div { padding: 15px 18px; border-left: 1px solid var(--line); background: var(--card); }
+  .example div:first-child { border-left: 0; }
+  .example b { display: block; font: 600 25px "IBM Plex Mono", monospace; margin: 4px 0 2px; }
+  .example span { color: var(--muted); font-size: 15px; }
+</style>
+</head>
+<body>
+<div id="canvas">
+
+<!-- ======================================================= SYSTEM -->
+<section class="diagram" id="system">
+  <div class="head">
+    <div class="kicker">FinResearch AI · system architecture</div>
+    <h1>One API, one database, as many workers as you need</h1>
+    <div class="sub">PostgreSQL is the job queue, vector store, evidence ledger and agent checkpoint store.<br>No message broker, so a job can never be lost between two systems.</div>
+    <div class="legend">
+      <span><i style="background:var(--accent)"></i>deterministic code</span>
+      <span><i style="background:var(--llm)"></i>LLM</span>
+      <span><i style="background:var(--db)"></i>storage</span>
+      <span><i style="background:var(--ext)"></i>external service</span>
+    </div>
+  </div>
+
+  <div class="rowA">
+    <div class="card" id="ui">
+      <div class="label">Browser</div>
+      <h3>React research desk</h3>
+      <div class="what">React 19 · TypeScript · TanStack Query</div>
+      <ul class="l">
+        <li>Live job progress</li>
+        <li>Claim inspector and evidence ledger</li>
+        <li>Valuation what-if and price check</li>
+      </ul>
+    </div>
+    <div class="card" id="nginx">
+      <div class="label">Edge</div>
+      <h3>nginx</h3>
+      <div class="what" style="margin:0">Serves the UI and proxies <code>/api</code>: one origin</div>
+    </div>
+    <div class="card" id="api">
+      <div class="label">API</div>
+      <h3>FastAPI</h3>
+      <ul class="l">
+        <li><code>POST /research</code> → 202 + idempotency key</li>
+        <li>Reports, evidence, agent trace</li>
+        <li>Fair value + what-if <span class="tag code">CODE</span></li>
+        <li>Ask-the-analyst agent <span class="tag llm">LLM</span></li>
+        <li>Spend caps → 429</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="rowB">
+    <div class="card" id="worker">
+      <div class="label">Workers × N</div>
+      <h3>Research pipeline</h3>
+      <div class="what">Leases with heartbeats · resume at the last stage</div>
+      <div class="label">Ingestion · no AI</div>
+      <div class="pills" style="margin-bottom:16px">
+        <span class="pill code">resolve</span><span class="pill code">filings</span><span class="pill code">XBRL</span>
+        <span class="pill code">metrics</span><span class="pill code">fair value</span><span class="pill code">index</span>
+      </div>
+      <div class="label">LangGraph agent</div>
+      <div class="pills">
+        <span class="pill llm">plan</span><span class="pill llm">researchers ×N</span><span class="pill llm">draft</span>
+        <span class="pill code">verify</span><span class="pill code">critic</span><span class="pill llm">write</span>
+      </div>
+    </div>
+    <div class="card t-db" id="pg">
+      <div class="label" style="color:var(--db)">The only stateful service</div>
+      <h3>PostgreSQL 17 + pgvector</h3>
+      <div class="what">Constraints do real work: unique idempotency keys, checks, cascades</div>
+      <div class="db-grid">
+        <div class="chip"><b>Job queue</b><span>SKIP LOCKED, leases, fencing tokens</span></div>
+        <div class="chip"><b>Filings &amp; chunks</b><span>tsvector + HNSW vector(768)</span></div>
+        <div class="chip"><b>Claim ↔ evidence</b><span>every claim typed and verified</span></div>
+        <div class="chip"><b>Metrics &amp; valuations</b><span>Decimal, inputs and sources kept</span></div>
+        <div class="chip"><b>Agent checkpoints</b><span>resume after any failure</span></div>
+        <div class="chip"><b>Cost ledger</b><span>a priced row per model call</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ext-row">
+    <div class="chip t-ext" id="sec"><b>SEC EDGAR</b><span>filings, XBRL · cached</span></div>
+    <div class="chip t-ext" id="gemini"><b>Google Gemini</b><span>LLM + embeddings</span></div>
+    <div class="chip t-code" id="rerank"><b>MiniLM reranker</b><span>local ONNX · free</span></div>
+    <div class="chip t-ext" id="treasury"><b>US Treasury</b><span>10-year yield · daily</span></div>
+    <div class="chip t-ext" id="cboe"><b>Cboe quote</b><span>delayed price · no key</span></div>
+  </div>
+
+  <div class="card cicd">
+    <span class="label" style="margin:0 6px 0 0">CI / CD</span>
+    <span class="step">tests</span><span class="sep">→</span>
+    <span class="step">amd64 + arm64 images</span><span class="sep">→</span>
+    <span class="step">boot stack, run a job</span><span class="sep">→</span>
+    <span class="step">GHCR</span><span class="sep">→</span>
+    <span class="step">deploy, roll back on failure</span>
+  </div>
+</section>
+
+<!-- ======================================================= PIPELINE -->
+<section class="diagram" id="pipeline">
+  <div class="head">
+    <div class="kicker">FinResearch AI · one research job</div>
+    <h1>Code gathers the facts. Agents reason over them.<br>Code checks the result.</h1>
+    <div class="sub">Every stage writes idempotently and is lease-fenced. The agent is checkpointed in Postgres after every node,<br>so a retried job resumes where it failed.</div>
+    <div class="legend">
+      <span><i style="background:var(--accent)"></i>deterministic code</span>
+      <span><i style="background:var(--llm)"></i>LLM</span>
+    </div>
+  </div>
+
+  <div class="pipe">
+    <div class="group" id="g1">
+      <div class="label">1 · Ingestion · no model calls</div>
+      <div class="vstack">
+        <div class="box code" id="p1"><h4><span class="n">01</span>Resolve company</h4><p>Ticker → SEC CIK and industry; banks and insurers rejected with a reason</p></div>
+        <div class="box code" id="p2"><h4><span class="n">02</span>Fetch filings</h4><p>Latest 10-K and any newer 10-Q, split into sections</p></div>
+        <div class="box code" id="p3"><h4><span class="n">03</span>Extract XBRL</h4><p>Five fiscal years, each figure with its filing and period</p></div>
+        <div class="box code" id="p4"><h4><span class="n">04</span>Compute metrics</h4><p>Margins, FCF, growth, ROE, leverage, in Decimal</p></div>
+        <div class="box code" id="p5"><h4><span class="n">05</span>Fair value</h4><p>Cash-flow DCF + earnings power value</p></div>
+        <div class="box code" id="p6"><h4><span class="n">06</span>Index filings</h4><p>Chunks for keyword + vector (768-d) search</p></div>
+      </div>
+    </div>
+
+    <div class="group" id="g2">
+      <div class="label">2 · Research · LangGraph agent</div>
+      <div class="vstack">
+        <div class="box llm" id="a1"><h4><span class="n">07</span>Plan</h4><p>Splits the question into 3–6 focused sub-questions</p></div>
+        <div class="fan" id="a2">
+          <div class="box llm" id="r1"><h4><span class="n">08</span>Researcher</h4><div class="tools"><span>search_filings</span><span>read_passage</span></div></div>
+          <div class="box llm" id="r2"><h4>Researcher</h4><div class="tools"><span>get_metrics</span><span>reported figures</span></div></div>
+          <div class="box llm" id="r3"><h4>Researcher …</h4><div class="tools"><span>in parallel</span><span>tool budget</span></div></div>
+        </div>
+        <div class="box llm" id="a3"><h4><span class="n">09</span>Draft claims</h4><p>May cite only passages the researchers actually read</p></div>
+        <div class="box" id="a4"><h4><span class="n">10</span>Verify every claim</h4>
+          <div class="checks"><span>quote verbatim <span class="tag code">CODE</span></span><span>number = metric <span class="tag code">CODE</span></span><span>fact-check <span class="tag llm">LLM</span></span></div></div>
+        <div class="box code" id="a5"><h4><span class="n">11</span>Critic</h4><p>Material failure: send it back once. Worse redraft: keep the better one.</p></div>
+        <div class="box llm" id="a6"><h4><span class="n">12</span>Write report</h4><p>Answer, summary, scenarios and risks from verified claims only</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================= VALUATION -->
+<section class="diagram" id="valuation">
+  <div class="head">
+    <div class="kicker">FinResearch AI · intrinsic value</div>
+    <h1>Fair value from reported numbers,<br>checked against the share price</h1>
+    <div class="sub">Deterministic, in Decimal, reproducible from stored inputs. No model touches the arithmetic.</div>
+  </div>
+
+  <div class="vgrid">
+    <div class="chip t-ext" id="v-sec"><b>SEC XBRL · 5 fiscal years</b><span>cash flow, capex, stock comp, revenue, operating income, debt, cash, shares</span></div>
+    <div class="chip t-ext" id="v-tsy"><b>US Treasury 10-year</b><span>risk-free rate, dated</span></div>
+    <div class="chip t-ext" id="v-dam"><b>Damodaran industry data</b><span>beta, debt ratio, equity risk premium</span></div>
+
+    <div class="card t-code" id="v-dcf">
+      <h3>Cash-flow DCF</h3>
+      <div class="what" style="margin:0">With growth</div>
+      <div class="formula">FCF = CFO + interest·(1−t)
+      − capex − stock comp
+base = avg FCF margin × revenue
+g = revenue record (≤ 20%)
+    5 yrs, fade 5 yrs → 2.5%</div>
+    </div>
+    <div class="card" id="v-wacc">
+      <h3>Cost of capital</h3>
+      <div class="what" style="margin:0">CAPM, industry beta</div>
+      <div class="formula">Ke = Rf + β × ERP
+Kd = (Rf + spread)(1 − t)
+WACC = E/V·Ke + D/V·Kd</div>
+    </div>
+    <div class="card t-code" id="v-epv">
+      <h3>Earnings power</h3>
+      <div class="what" style="margin:0">No growth at all: a floor</div>
+      <div class="formula">EPV = avg operating margin
+      × revenue × (1 − t)
+      ÷ WACC</div>
+    </div>
+
+    <div class="card t-db span2" id="v-fair">
+      <h3>Fair value and range</h3>
+      <div class="what" style="margin:0">Equity = enterprise value + cash − debt, per diluted share</div>
+      <div class="formula">fair value  = mean(DCF, EPV)
+range       = [min, max] of the methods
+sensitivity = WACC ±1 pt × growth ±4 pts
+what-if     = 6 editable assumptions, nothing saved</div>
+    </div>
+    <div class="card" id="v-price">
+      <h3>Price check</h3>
+      <div class="what" style="margin:0">Delayed quote → reverse DCF: the growth the price needs, next to the record</div>
+      <div class="verdict"><span class="v-under">undervalued</span><span class="v-fair">fair</span><span class="v-over">overvalued</span></div>
+    </div>
+  </div>
+
+  <div class="example">
+    <div><span>Microsoft · fair value</span><b>$207.80</b><span>range $166–249</span></div>
+    <div><span>Share price</span><b>$527.77</b><span>Cboe, delayed</span></div>
+    <div><span>Growth price needs</span><b>28.3%/yr</b><span>for 5 years</span></div>
+    <div><span>Revenue record</span><b>13.7%/yr</b><span>FY2022–FY2026</span></div>
+  </div>
+</section>
+
+<svg class="wires" id="wires"><defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--arrow)"/></marker>
+</defs></svg>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+document.documentElement.dataset.theme = params.get("theme") || "dark";
+const which = params.get("d") || "system";
+document.getElementById(which).classList.add("on");
+
+const canvas = document.getElementById("canvas");
+const svg = document.getElementById("wires");
+const NS = "http://www.w3.org/2000/svg";
+function anchor(id, side, t = 0.5) {
+  const r = document.getElementById(id).getBoundingClientRect(), c = canvas.getBoundingClientRect();
+  const x = r.left - c.left, y = r.top - c.top;
+  return { l: [x, y + r.height * t], r: [x + r.width, y + r.height * t], t: [x + r.width * t, y], b: [x + r.width * t, y + r.height] }[side];
+}
+function path(d, { dash, end = true, start = false } = {}) {
+  const p = document.createElementNS(NS, "path");
+  p.setAttribute("d", d); p.setAttribute("fill", "none"); p.setAttribute("stroke", "var(--arrow)"); p.setAttribute("stroke-width", "1.8");
+  if (end) p.setAttribute("marker-end", "url(#ah)");
+  if (start) p.setAttribute("marker-start", "url(#ah)");
+  if (dash) p.setAttribute("stroke-dasharray", "6 5");
+  svg.appendChild(p);
+}
+function text(x, y, label, anchorPos = "middle") {
+  const g = document.createElementNS(NS, "g");
+  label.split("\n").forEach((line, i) => {
+    const t = document.createElementNS(NS, "text");
+    t.setAttribute("x", x); t.setAttribute("y", y + i * 18); t.setAttribute("text-anchor", anchorPos); t.setAttribute("class", "wl");
+    t.textContent = line; g.appendChild(t);
+  });
+  svg.appendChild(g);
+  const bb = g.getBBox();
+  const bg = document.createElementNS(NS, "rect");
+  bg.setAttribute("x", bb.x - 6); bg.setAttribute("y", bb.y - 3); bg.setAttribute("width", bb.width + 12); bg.setAttribute("height", bb.height + 6);
+  bg.setAttribute("rx", 5); bg.setAttribute("class", "wl-bg");
+  svg.insertBefore(bg, g);
+}
+const h = (a, b) => { const mx = (a[0] + b[0]) / 2; return `M${a[0]},${a[1]} C${mx},${a[1]} ${mx},${b[1]} ${b[0]},${b[1]}`; };
+const v = (a, b) => { const my = (a[1] + b[1]) / 2; return `M${a[0]},${a[1]} C${a[0]},${my} ${b[0]},${my} ${b[0]},${b[1]}`; };
+const line = (a, b) => `M${a[0]},${a[1]} L${b[0]},${b[1]}`;
+
+document.fonts.ready.then(() => {
+  if (which === "system") {
+    path(h(anchor("ui", "r"), anchor("nginx", "l")), { start: true });
+    path(h(anchor("nginx", "r"), anchor("api", "l")), { start: true });
+    // API down into Postgres
+    const a = anchor("api", "b", 0.5), p = anchor("pg", "t", 0.5);
+    path(line(a, [a[0], p[1]]));
+    text(a[0] - 14, (a[1] + p[1]) / 2 - 4, "INSERT job = enqueue\n(one transaction) · reads", "end");
+    // workers <-> Postgres
+    const w = anchor("worker", "r", 0.35), q = [anchor("pg", "l")[0], w[1]];
+    path(line(w, q), { start: true });
+    text((w[0] + q[0]) / 2, w[1] - 52, "claim\nheartbeat\nfenced writes");
+    // outbound calls as one tree from the workers
+    const tops = ["sec", "gemini", "rerank", "treasury", "cboe"].map((id) => anchor(id, "t"));
+    const busY = tops[0][1] - 32, wb = anchor("worker", "b", 0.5);
+    path(`M${wb[0]},${wb[1]} L${wb[0]},${busY} M${tops[0][0]},${busY} L${tops[4][0]},${busY}`, { dash: true, end: false });
+    for (const t of tops) path(line([t[0], busY], t), { dash: true });
+    text(tops[4][0] - 10, busY - 12, "outbound calls (the API also calls Gemini and Cboe)", "end");
+  }
+  if (which === "pipeline") {
+    for (const [x, y] of [["p1","p2"],["p2","p3"],["p3","p4"],["p4","p5"],["p5","p6"]]) path(line(anchor(x, "b"), anchor(y, "t")));
+    path(h(anchor("g1", "r", 0.5), anchor("g2", "l", 0.5)));
+    text((anchor("g1", "r")[0] + anchor("g2", "l")[0]) / 2, anchor("g1", "r", 0.5)[1] - 16, "then");
+    for (const r of ["r1", "r2", "r3"]) path(v(anchor("a1", "b"), anchor(r, "t")));
+    for (const r of ["r1", "r2", "r3"]) path(v(anchor(r, "b"), anchor("a3", "t")));
+    path(line(anchor("a3", "b"), anchor("a4", "t")));
+    path(line(anchor("a4", "b"), anchor("a5", "t")));
+    path(line(anchor("a5", "b"), anchor("a6", "t")));
+    // revision loop up the right-hand side
+    const c = anchor("a5", "r", 0.5), r = anchor("a2", "r", 0.5), x = Math.max(c[0], r[0]) + 30;
+    path(`M${c[0]},${c[1]} L${x},${c[1]} L${x},${r[1]} L${r[0] + 2},${r[1]}`, { dash: true });
+    text(x + 10, (c[1] + r[1]) / 2 - 18, "back to\nresearch,\nonce", "start");
+  }
+  if (which === "valuation") {
+    path(line(anchor("v-sec", "b"), anchor("v-dcf", "t")));
+    path(line(anchor("v-tsy", "b"), anchor("v-wacc", "t")));
+    path(v(anchor("v-dam", "b", 0.3), anchor("v-wacc", "t", 0.78)));
+    path(line(anchor("v-wacc", "l", 0.55), anchor("v-dcf", "r", 0.55)));
+    path(line(anchor("v-wacc", "r", 0.55), anchor("v-epv", "l", 0.55)));
+    { const d = anchor("v-dcf", "b"); path(line(d, [d[0], anchor("v-fair", "t")[1]])); }
+    path(v(anchor("v-epv", "b", 0.3), anchor("v-fair", "t", 0.85)));
+    path(line(anchor("v-fair", "r"), anchor("v-price", "l")));
+  }
+  document.body.dataset.ready = "1";
+});
+</script>
+</body>
+</html>
