@@ -30,21 +30,21 @@ https://github.com/user-attachments/assets/052b5d0a-8247-49fb-98fd-71ef3b0956cc
 
 | Capability | What you get |
 | --- | --- |
-| 🔎 **Research any US-listed company** | Type a ticker and a question. The job runs in the background; leave and come back, and it survives restarts and crashes. Live stage-by-stage progress shows what the system is doing. |
-| 🤖 **An agent team reads the filings** | A planner splits your question into 3–6 sub-questions. Parallel researcher agents search the 10-K and 10-Q, read passages and pull metrics, and a fact-checker sends weak claims back for another look. |
-| 🧾 **Evidence for every claim** | Each claim is typed as a **reported fact** (quoted verbatim from the filing), a **calculation** (formula, inputs and XBRL source shown) or an **interpretation** (labelled as opinion), with a verdict: supported, partly supported or unsupported. |
-| 📈 **Five years of financials** | Revenue, margins, free cash flow, growth, ROE and leverage from SEC XBRL. Every figure carries its filing, period and concept, and is computed in `Decimal` by tested code, never by the model. |
-| 💲 **Intrinsic valuation** | A fair value per share from two methods (a cash-flow DCF and earnings power value). It is set against a free delayed share price, and a **reverse DCF** tells you how much growth the price assumes, next to the company's actual record. A what-if panel lets you change any assumption. [More below](#intrinsic-valuation). |
-| 💬 **Ask the analyst** | Follow-up questions answered by a tool-using agent that searches the same filings; its quotes are checked against the source too. |
-| 🧮 **Spend you can see** | Every model call is priced into a cost ledger, with daily and monthly caps. A full report costs about **$0.04–0.11**. |
-| 📄 **Reports you can keep** | Saved reports with data freshness, sources and limitations; export to Markdown or print to PDF; works on a phone. |
+| 🔎 **Research** | Type a ticker and a question. The job runs in the background; leave and come back, and it survives restarts and crashes. Live stage-by-stage progress shows what the system is doing. |
+| 🤖 **Agent team** | A planner splits your question into 3–6 sub-questions. Parallel researcher agents search the 10-K and 10-Q, read passages and pull metrics, and a fact-checker sends weak claims back for another look. |
+| 🧾 **Evidence** | Each claim is typed as a **reported fact** (quoted verbatim from the filing), a **calculation** (formula, inputs and XBRL source shown) or an **interpretation** (labelled as opinion), with a verdict: supported, partly supported or unsupported. |
+| 📈 **Financials** | Revenue, margins, free cash flow, growth, ROE and leverage from SEC XBRL. Every figure carries its filing, period and concept, and is computed in `Decimal` by tested code, never by the model. |
+| 💲 **Valuation** | A fair value per share from two methods (a cash-flow DCF and earnings power value). It is set against a free delayed share price, and a **reverse DCF** tells you how much growth the price assumes, next to the company's actual record. A what-if panel lets you change any assumption. [More below](#intrinsic-valuation). |
+| 💬 **Analyst chat** | Follow-up questions answered by a tool-using agent that searches the same filings; its quotes are checked against the source too. |
+| 🧮 **Costs** | Every model call is priced into a cost ledger, with daily and monthly caps. A full report costs about **$0.04–0.11**. |
+| 📄 **Reports** | Saved reports with data freshness, sources and limitations; export to Markdown or print to PDF; works on a phone. |
 
 ## Product tour
 
 | | |
 | --- | --- |
 | ![Overview](docs/screenshots/overview.png) | ![Live job](docs/screenshots/job-live.png) |
-| **Overview.** What's running and what's ready; ⌘K searches every company, report and job. | **Live job.** Ten checkpointed stages with typical durations; leave and come back any time. |
+| **Overview.** What's running and what's ready; ⌘K searches every company, report and job. | **Live job.** Eleven checkpointed stages with typical durations; leave and come back any time. |
 | ![Research agent](docs/screenshots/agent-trace.png) | ![Ask the analyst](docs/screenshots/analyst-chat.png) |
 | **Research agent.** The plan, every researcher's tool calls, and the fact-checker's decisions. Here it sent a failed claim and an empty-handed question back for another round, and all 16 claims ended up supported. | **Ask the analyst.** Follow-up questions answered by a tool-using agent; each cited quote is checked against the filing. |
 | ![Report](docs/screenshots/report.png) | ![Claim inspector](docs/screenshots/claim-inspector.png) |

@@ -6,7 +6,7 @@
 diagrams.html?d=system|pipeline|valuation&theme=dark|light
 ```
 
-To re-render, open each view in Chrome and screenshot the `#canvas` element at 1.5× device scale. Any Playwright
+To re-render, open each view in Chrome and screenshot the `#canvas` element at 2× device scale. Any Playwright
 script works, for example:
 
 ```js
