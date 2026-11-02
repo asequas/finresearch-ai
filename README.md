@@ -26,21 +26,37 @@ https://github.com/user-attachments/assets/052b5d0a-8247-49fb-98fd-71ef3b0956cc
 
 | Capability | What you get |
 | --- | --- |
-| 🔎 **Research** | Type a ticker and a question. The job runs in the background; leave and come back, and it survives restarts and crashes. Live stage-by-stage progress shows what the system is doing. |
-| 🤖 **Agent team** | A planner splits your question into 3–6 sub-questions. Parallel researcher agents search the 10-K and 10-Q, read passages and pull metrics, and a fact-checker sends weak claims back for another look. |
-| 🧾 **Evidence** | Each claim is typed as a **reported fact** (quoted verbatim from the filing), a **calculation** (formula, inputs and XBRL source shown) or an **interpretation** (labelled as opinion), with a verdict: supported, partly supported or unsupported. |
-| 📈 **Financials** | Revenue, margins, free cash flow, growth, ROE and leverage from SEC XBRL. Every figure carries its filing, period and concept, and is computed in `Decimal` by tested code, never by the model. |
-| 💲 **Valuation** | A fair value per share from two methods (a cash-flow DCF and earnings power value). It is set against a free delayed share price, and a **reverse DCF** tells you how much growth the price assumes, next to the company's actual record. A what-if panel lets you change any assumption. [More below](#intrinsic-valuation). |
-| 💬 **Analyst chat** | Follow-up questions answered by a tool-using agent that searches the same filings; its quotes are checked against the source too. |
-| 🧮 **Costs** | Every model call is priced into a cost ledger, with daily and monthly caps. A full report costs about **$0.04–0.11**. |
-| 📄 **Reports** | Saved reports with data freshness, sources and limitations; export to Markdown or print to PDF; works on a phone. |
+| **Research** | Type a ticker and a question. The job runs in the background; leave and come back, and it survives restarts and crashes. Live stage-by-stage progress shows what the system is doing. |
+| **Agent&nbsp;team** | A planner splits your question into 3–6 sub-questions. Parallel researcher agents search the 10-K and 10-Q, read passages and pull metrics, and a fact-checker sends weak claims back for another look. |
+| **Evidence** | Each claim is typed as a **reported fact** (quoted verbatim from the filing), a **calculation** (formula, inputs and XBRL source shown) or an **interpretation** (labelled as opinion), with a verdict: supported, partly supported or unsupported. |
+| **Financials** | Revenue, margins, free cash flow, growth, ROE and leverage from SEC XBRL. Every figure carries its filing, period and concept, and is computed in `Decimal` by tested code, never by the model. |
+| **Valuation** | A fair value per share from two methods (a cash-flow DCF and earnings power value). It is set against a free delayed share price, and a **reverse DCF** tells you how much growth the price assumes, next to the company's actual record. A what-if panel lets you change any assumption. [More below](#intrinsic-valuation). |
+| **Analyst&nbsp;chat** | Follow-up questions answered by a tool-using agent that searches the same filings; its quotes are checked against the source too. |
+| **Costs** | Every model call is priced into a cost ledger, with daily and monthly caps. A full report costs about **$0.04–0.11**. |
+| **Reports** | Saved reports with data freshness, sources and limitations; export to Markdown or print to PDF; works on a phone. |
 
-| | |
-| --- | --- |
-| ![The Microsoft report: the answer first, every sentence citing numbered claims, with verification counts](docs/screenshots/report.png) | ![A claim opened to its source: the 10-K passage with the quoted words highlighted and the verifier's verdict](docs/screenshots/evidence.png) |
-| **The report.** The answer first, then the summary, financials, valuation, scenarios, risks and the evidence ledger. | **Every claim opens to its source.** The filing passage with the quoted words highlighted, the claim type and the verdict. |
-| ![The valuation section: fair value and range, the methods on one scale, and the price check against a delayed quote](docs/screenshots/valuation.png) | ![The research run: the plan, each researcher agent's tool calls and timing, and the fact-checker's decisions](docs/screenshots/agent.png) |
-| **Intrinsic valuation.** Fair value and range, set against the delayed price with the growth the price implies. | **The agent run.** The plan, every researcher's tool calls, and the fact-checker sending a weak claim back. |
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/report.png" alt="The Microsoft report: the answer first, every sentence citing numbered claims, with verification counts"><br>
+      <b>The report.</b> The answer first, then the summary, financials, valuation, scenarios, risks and the evidence ledger.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/evidence.png" alt="A claim opened to its source: the 10-K passage with the quoted words highlighted and the verifier's verdict"><br>
+      <b>Every claim opens to its source.</b> The filing passage with the quoted words highlighted, the claim type and the verdict.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/valuation.png" alt="The valuation section: fair value and range, the methods on one scale, and the price check against a delayed quote"><br>
+      <b>Intrinsic valuation.</b> Fair value and range, set against the delayed price with the growth the price implies.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/agent.png" alt="The research run: the plan, each researcher agent's tool calls and timing, and the fact-checker's decisions"><br>
+      <b>The agent run.</b> The plan, every researcher's tool calls, and the fact-checker sending a weak claim back.
+    </td>
+  </tr>
+</table>
 
 ## Intrinsic valuation
 
