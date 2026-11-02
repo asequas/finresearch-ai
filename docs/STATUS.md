@@ -21,7 +21,7 @@ against real external services; **proposed** = not built.
 | Spend caps: $1/day and $5/month on billed calls; new research and chat refused with 429 and the reset time; running jobs stop resumably; free tier never blocks | `tests/integration/test_costs.py` |
 | Fewer wasted calls and tokens: a 429 puts the model in cool-down so later calls skip it; old researcher tool results compacted to citable headers; fallback chain limited to priced models | `tests/unit/test_llm_fallback.py`, `tests/unit/test_agent_cost_controls.py` |
 | Costs tab (`/costs`): caps with meters, usage by day/model/stage/job, method note; job page shows each job's cost; phone layout without page overflow | playwright-cli at 1440 and 390, zero console errors |
-| Agent trace UI (job page) and chat sheet (report) in the browser at 1440 and 390, zero console errors | playwright-cli, `docs/screenshots/agent-trace.png`, `analyst-chat.png` |
+| Agent trace UI (job page) and chat sheet (report) in the browser at 1440 and 390, zero console errors | playwright-cli at 1440 and 390, `docs/screenshots/agent.png` |
 | Retrieval quality: tuned hybrid + MiniLM rerank vs the original hybrid on a 30-question gold set: R@1 0.567→0.733, R@3 0.800→0.900, MRR 0.706→0.811, nDCG@6 0.528→0.626 (ADR 0007) | `python -m backend.evals.retrieval` |
 | Live browser walkthrough (playwright-cli) at 1440/768/390: submit from the palette, live stages, cancel/retry, report, claim/figure/metric inspectors, keyboard Escape + focus return, filters in the URL, Markdown export, company workspace; zero console errors | demo session 2026-10-30/31 |
 | Design gate: 0 FAIL on every route (`inspect.mjs --app`), lint 0 FAIL; Vercel web-interface-guideline findings fixed | automated design inspection, run locally |
